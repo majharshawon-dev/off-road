@@ -264,6 +264,19 @@ tr.tot td{font-weight:700}
 /* toast */
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 14px);z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,460px);box-shadow:var(--shadow)}
 
+/* ride detail map */
+.ride-map{position:relative;isolation:isolate;z-index:0;height:280px;border-radius:12px;overflow:hidden;background:var(--sunk);border:1px solid var(--line)}
+.ride-map .empty{height:100%;display:flex;flex-direction:column;justify-content:center}
+.route-lg{width:100%;height:100%;display:block}
+.route-lg path{fill:none;stroke:var(--accent);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+.route-lg circle{fill:var(--ink);stroke:var(--surface);stroke-width:3}
+.route-lg circle.s{fill:var(--good)}
+.ride-map.live-map{background:var(--sunk)}
+.ride-map .leaflet-container{font-family:var(--f-body)}
+.map-note{margin:-6px 0 0;font-size:12.5px;color:var(--muted)}
+a.btn{color:inherit;text-decoration:none}
+a.btn.primary{color:var(--accent-ink)}
+
 </style>
 </head>
 <body>
@@ -336,7 +349,7 @@ const Core = (() => {
       throw new Error('This is a raw location file (Records.json). It has no trips in it. Export "Timeline data" from Google Maps instead.');
     else throw new Error("This file doesn't look like a Google Timeline export.");
 
-    const pts = [], trips = [];
+    const pts = [], trips = [], visits = [];
     for (const s of segs) {
       if (!s || typeof s !== 'object') continue;
       const st = toMs(s.startTime), en = toMs(s.endTime);
@@ -348,6 +361,10 @@ const Core = (() => {
             t = st + (+p.durationMinutesOffsetFromStartTime) * MIN;
           if (ll && !isNaN(t)) pts.push([t, ll[0], ll[1]]);
         }
+      }
+      if (s.visit && !isNaN(st) && !isNaN(en)) {
+        const tc = s.visit.topCandidate || {};
+        visits.push({ start: st, end: en, sem: String(tc.semanticType || '').toUpperCase() });
       }
       const a = s.activity;
       if (a && !isNaN(st) && !isNaN(en)) {
@@ -364,6 +381,15 @@ const Core = (() => {
       for (let i = lo; i < pts.length && pts[i][0] <= t.end + MIN; i++) path.push([pts[i][1], pts[i][2]]);
       t.path = path;
     }
+    visits.sort((x, y) => x.start - y.start);
+    const lab = v => !v ? '' : /HOME/.test(v.sem) ? 'Home' : /WORK/.test(v.sem) ? 'Work' : '';
+    const near = (t, pick) => {
+      let best = null, bd = 45 * MIN;
+      for (const v of visits) { const dd = Math.abs(pick(v) - (pick === endOf ? t.start : t.end)); if (dd < bd) { bd = dd; best = v; } }
+      return best;
+    };
+    const endOf = v => v.end, startOf = v => v.start;
+    for (const t of trips) { t.from = lab(near(t, endOf)); t.to = lab(near(t, startOf)); }
     return finish(trips);
   }
 
@@ -398,7 +424,8 @@ const Core = (() => {
       min = Math.min(min, t.start); max = Math.max(max, t.end);
       return { id: 'tl-' + t.start, start: t.start, end: t.end, type: t.type,
         km: Math.round(km * 100) / 100, approx,
-        path: simplify(path, 48).map(p => [r5(p[0]), r5(p[1])]) };
+        from: t.from || '', to: t.to || '',
+        path: simplify(path, 160).map(p => [r5(p[0]), r5(p[1])]) };
     });
     return { trips: out, types, from: min, to: max };
   }
@@ -489,7 +516,36 @@ const Core = (() => {
     return { max: step * ticks, step };
   }
 
-  return { parseLatLng, hav, pathKm, simplify, parseTimeline, fuelStats, tankEstimate, summarize, niceScale, toMs };
+  function rideTitle(from, to) {
+    if (from && to && from !== to) return from + ' → ' + to;
+    if (to) return 'To ' + to.toLowerCase();
+    if (from) return 'From ' + from.toLowerCase();
+    return '';
+  }
+  function overlaps(a, list) {
+    const da = Math.max(1, a.end - a.start);
+    for (const r of list) {
+      if (r.id === a.id) return true;
+      const o = Math.min(a.end, r.end) - Math.max(a.start, r.start);
+      if (o > 0 && o >= 0.5 * Math.min(da, Math.max(1, r.end - r.start))) return true;
+    }
+    return false;
+  }
+  function gmapsUrl(path) {
+    if (!path || !path.length) return '';
+    const f = p => p[0].toFixed(5) + ',' + p[1].toFixed(5);
+    const a = path[0], b = path[path.length - 1];
+    let u = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + f(a) + '&destination=' + f(b);
+    const inner = path.slice(1, -1);
+    if (inner.length) {
+      const n = Math.min(8, inner.length), w = [];
+      for (let i = 0; i < n; i++) w.push(inner[Math.floor((i + 0.5) * inner.length / n)]);
+      u += '&waypoints=' + w.map(f).join('%7C');
+    }
+    return u;
+  }
+
+  return { rideTitle, overlaps, gmapsUrl, parseLatLng, hav, pathKm, simplify, parseTimeline, fuelStats, tankEstimate, summarize, niceScale, toMs };
 })();
 
 
@@ -535,6 +591,7 @@ const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidde
 
 const CATS = ['Service', 'Engine oil', 'Parts & repair', 'Tyres', 'Tax token & papers', 'Insurance', 'Parking & toll', 'Wash', 'Gear & accessories', 'Other'];
 const IN_CLAUDE = !!(window.claude && typeof window.claude.use === 'function');
+const PATH_MAX = IN_CLAUDE ? 48 : 160;
 const DEF = { bikeName: 'My bike', tankL: 12, reserveL: 2, estKmpl: 40, odo: 0 };
 const TYPE_NAMES = {
   MOTORCYCLING: 'Motorcycling', IN_PASSENGER_VEHICLE: 'Driving (in a vehicle)', IN_VEHICLE: 'In a vehicle', IN_ROAD_VEHICLE: 'Road vehicle',
@@ -703,8 +760,8 @@ let rq = 0;
 function schedule() { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); }
 
 /* ---------- Small views ---------- */
-function routeSvg(path, w = 52, h = 40) {
-  if (!path || path.length < 2) return `<svg class="route" viewBox="0 0 ${w} ${h}" aria-hidden="true"><circle cx="${w / 2}" cy="${h / 2}" r="2.5"/></svg>`;
+function routeSvg(path, w = 52, h = 40, cls = 'route') {
+  if (!path || path.length < 2) return `<svg class="${cls}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><circle cx="${w / 2}" cy="${h / 2}" r="2.5"/></svg>`;
   const lat0 = path[0][0] * Math.PI / 180, k = Math.cos(lat0);
   const xs = path.map(p => p[1] * k), ys = path.map(p => -p[0]);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -712,12 +769,13 @@ function routeSvg(path, w = 52, h = 40) {
   const ox = (w - (maxX - minX) * sc) / 2, oy = (h - (maxY - minY) * sc) / 2;
   const pts = xs.map((x, i) => [((x - minX) * sc + ox).toFixed(1), ((ys[i] - minY) * sc + oy).toFixed(1)]);
   const e = pts[pts.length - 1];
-  return `<svg class="route" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="M${pts.map(p => p.join(' ')).join('L')}"/><circle cx="${e[0]}" cy="${e[1]}" r="2.6"/></svg>`;
+  const st = pts[0], big = w > 100;
+  return `<svg class="${cls}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="M${pts.map(p => p.join(' ')).join('L')}"/>${big ? `<circle class="s" cx="${st[0]}" cy="${st[1]}" r="6"/>` : ''}<circle cx="${e[0]}" cy="${e[1]}" r="${big ? 6 : 2.6}"/></svg>`;
 }
 const SRC = { gps: 'GPS', timeline: 'Timeline', manual: 'Manual' };
 function rideItem(r, d) {
   const min = (r.end - r.start) / 6e4, sp = min > 0 ? r.km / (min / 60) : 0;
-  return `<li><button class="item" data-edit-ride="${esc(r.id)}" ${d.sample ? 'disabled' : ''}>${routeSvg(r.path)}
+  return `<li><button class="item" data-view-ride="${esc(r.id)}">${routeSvg(r.path)}
     <div class="main"><div class="t1">${esc(r.title || 'Ride')} <span class="chip">${SRC[r.src] || 'Manual'}</span></div>
     <div class="t2 num">${fDay(r.start)} · ${fTime(r.start)} · ${fDur(min)}${sp ? ' · ' + nf0.format(sp) + ' km/h avg' : ''}</div></div>
     <div class="val"><b>${kmf(r.km)}</b><span>km</span></div></button></li>`;
@@ -989,6 +1047,8 @@ function toast(msg) {
 /* ---------- Sheets ---------- */
 let sheetCleanup = null;
 function openSheet(title, html, mount) {
+  if (typeof sheetCleanup === 'function') sheetCleanup();
+  sheetCleanup = null;
   $('#sheet-title').textContent = title;
   $('#sheet-body').innerHTML = html;
   $('#scrim').hidden = false;
@@ -1148,54 +1208,131 @@ function sheetSettings() {
   });
 }
 
+/* ---------- Ride detail with map ---------- */
+let leafletP = null;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletP) return leafletP;
+  leafletP = new Promise((res, rej) => {
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'vendor/leaflet.css'; document.head.appendChild(css);
+    const sc = document.createElement('script'); sc.src = 'vendor/leaflet.js';
+    sc.onload = () => (window.L ? res(window.L) : rej(new Error('no map')));
+    sc.onerror = () => { leafletP = null; sc.remove(); rej(new Error('offline')); };
+    document.head.appendChild(sc);
+  });
+  return leafletP;
+}
+const isDark = () => { const t = document.documentElement.dataset.theme; return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); };
+function sheetRideView(r, d) {
+  const min = Math.max(0, (r.end - r.start) / 6e4), sp = min > 0 ? r.km / (min / 60) : 0;
+  const has = r.path && r.path.length >= 2, gm = has ? Core.gmapsUrl(r.path) : '';
+  const note = r.src === 'timeline' ? 'The line joins the points Google Timeline saved, so it can cut across corners.' : r.src === 'gps' ? 'Recorded by GPS on this phone.' : '';
+  openSheet(r.title || 'Ride', `<div class="form">
+    <div class="ride-map" id="ride-map">${has ? routeSvg(r.path, 600, 320, 'route-lg') : '<div class="empty"><b>No route saved</b>This ride was logged by hand, so there is no map.</div>'}</div>
+    ${has && note ? `<p class="map-note">${note}</p>` : ''}
+    ${statsHtml([
+      ['Distance', kmf(r.km), 'km', r.approx ? 'estimated' : ''],
+      ['Time', fDur(min), '', ''],
+      ['Average', sp ? nf0.format(sp) : '—', 'km/h', ''],
+      [r.maxKmh ? 'Top speed' : 'Recorded by', r.maxKmh ? nf0.format(r.maxKmh) : (SRC[r.src] || 'Manual'), r.maxKmh ? 'km/h' : '', ''],
+    ])}
+    <div class="calc num">${fDay(r.start)} ${new Date(r.start).getFullYear()} · ${fTime(r.start)} to ${fTime(r.end)}</div>
+    <div class="row-btns">${gm ? `<a class="btn" href="${esc(gm)}" target="_blank" rel="noopener">${ic('ride')}Open in Google Maps</a>` : ''}${d.sample ? '' : `<button type="button" class="btn primary" data-edit-ride="${esc(r.id)}">${ic('pen')}Edit ride</button>`}</div>
+  </div>`, root => {
+    if (!has || IN_CLAUDE) return null;
+    let map = null, dead = false;
+    loadLeaflet().then(L => {
+      const el = root.querySelector('#ride-map');
+      if (dead || !el) return;
+      el.innerHTML = ''; el.classList.add('live-map');
+      const dark = isDark();
+      map = L.map(el, { scrollWheelZoom: false, attributionControl: true });
+      L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`,
+        { subdomains: 'abcd', maxZoom: 19, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }).addTo(map);
+      const line = L.polyline(r.path, { color: dark ? '#FF6A2B' : '#D4470E', weight: 5, opacity: 0.95, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+      L.circleMarker(r.path[0], { radius: 7, color: '#FFFFFF', weight: 3, fillColor: '#2B8A3E', fillOpacity: 1 }).bindTooltip('Start').addTo(map);
+      L.circleMarker(r.path[r.path.length - 1], { radius: 7, color: '#FFFFFF', weight: 3, fillColor: '#15181C', fillOpacity: 1 }).bindTooltip('Finish').addTo(map);
+      map.fitBounds(line.getBounds(), { padding: [28, 28], maxZoom: 17 });
+      setTimeout(() => { if (map) map.invalidateSize(); }, 80);
+    }).catch(() => { });
+    return () => { dead = true; if (map) { map.remove(); map = null; } };
+  });
+}
+
 /* ---------- Google Timeline import ---------- */
-function sheetImport() {
+const IMPORT_TYPES_KEY = 'ride-import-types', LAST_IMPORT_KEY = 'ride-last-import';
+function sheetImport(pre) {
+  const last = +lsGet(LAST_IMPORT_KEY) || 0;
   openSheet('Import Google Timeline', `<div class="form">
+    ${last ? `<div class="calc">Last import: <b>${fDate(last)}</b>. Rides you already have are skipped, so importing the whole file again is fine.</div>` : ''}
     <ol class="steps">
-      <li>On your phone, open <b>Google Maps</b> → your profile picture → <b>Settings</b> → <b>Personal content</b> → <b>Export Timeline data</b>.</li>
-      <li>Save the file (usually <b>Timeline.json</b>) to your phone or computer.</li>
-      <li>Choose it below. You'll pick which trips count as bike rides before anything is saved.</li>
+      <li>In <b>Google Maps</b>: your profile picture → <b>Settings</b> → <b>Personal content</b> → <b>Export Timeline data</b>. Save the file.</li>
+      <li>Choose that file below.${IN_CLAUDE ? '' : ' Or, in your Files app, share <b>Timeline.json</b> to <b>Off Road</b>.'}</li>
+      <li>Check the count and tap <b>Import rides</b>.</li>
     </ol>
-    ${field('t-file', 'Timeline file', `<input id="t-file" type="file" accept=".json,application/json">`, 'Google Takeout files work too: unzip first and choose one month’s JSON file. The file stays on your device; only the rides you import are saved.')}
+    ${field('t-file', 'Timeline file', `<input id="t-file" type="file">`, 'Takeout files work too (unzip first, pick one month’s JSON). The file stays on your phone; only the rides you import are saved.')}
     <div id="t-out"></div></div>`, root => {
-    root.querySelector('#t-file').onchange = async ev => {
-      const f = ev.target.files[0]; if (!f) return;
-      const out = root.querySelector('#t-out');
-      out.innerHTML = `<div class="calc">Reading ${esc(f.name)}…</div>`;
+    const out = root.querySelector('#t-out');
+    const handle = async (getText, name) => {
+      out.innerHTML = `<div class="calc">Reading ${esc(name)}…</div>`;
       let res;
-      try { res = Core.parseTimeline(JSON.parse(await f.text())); }
-      catch (e) { out.innerHTML = `<div class="calc">${esc(e instanceof SyntaxError ? "That file isn't valid JSON. Choose the Timeline.json file you exported." : e.message)}</div>`; return; }
+      try { res = Core.parseTimeline(JSON.parse(await getText())); }
+      catch (e) { out.innerHTML = `<div class="calc">${esc(e instanceof SyntaxError ? "That file isn't valid JSON. Choose the Timeline.json file you exported from Google Maps." : e.message)}</div>`; return; }
       if (!res.trips.length) { out.innerHTML = `<div class="calc">No trips found in this file.</div>`; return; }
       const types = Object.entries(res.types).sort((a, b) => b[1] - a[1]);
+      const present = new Set(types.map(t => t[0]));
+      let saved = null; try { saved = JSON.parse(lsGet(IMPORT_TYPES_KEY) || 'null'); } catch (e) { }
+      const checked = new Set(saved && saved.some(t => present.has(t)) ? saved : present.has('MOTORCYCLING') ? ['MOTORCYCLING'] : DEFAULT_TYPES);
+      const hasMoto = present.has('MOTORCYCLING');
       out.innerHTML = `<div class="form">
         <div class="calc">Found <b>${nf0.format(res.trips.length)} trips</b> from ${fDate(res.from)} to ${fDate(res.to)}.</div>
         <div class="field"><span class="flabel">Which trips were on your bike?</span>
-          <div class="typelist">${types.map(([t, n]) => `<label><input type="checkbox" value="${esc(t)}" ${DEFAULT_TYPES.includes(t) ? 'checked' : ''}><span>${esc(TYPE_NAMES[t] || t.toLowerCase().replace(/_/g, ' '))}</span><em>${nf0.format(n)}</em></label>`).join('')}</div>
-          <span class="hint">Google often records motorcycle trips as "Driving". Untick anything that wasn't the bike.</span></div>
+          <div class="typelist">${types.map(([t, n]) => `<label><input type="checkbox" value="${esc(t)}" ${checked.has(t) ? 'checked' : ''}><span>${esc(TYPE_NAMES[t] || t.toLowerCase().replace(/_/g, ' '))}</span><em>${nf0.format(n)}</em></label>`).join('')}</div>
+          <span class="hint">${hasMoto ? 'Only Motorcycling is ticked. If Google labelled some bike trips as Driving, tick that too.' : 'Google often records motorcycle trips as "Driving". Untick anything that wasn’t the bike.'} Your choice is remembered for next time.</span></div>
         <div class="fgrid">
           ${field('t-from', 'From date', inp('t-from', `type="date" value="${toInput(res.from).slice(0, 10)}"`))}
-          ${field('t-min', 'Skip trips shorter than', inp('t-min', `inputmode="decimal" value="1"`, 'km'))}
+          ${field('t-min', 'Skip trips shorter than', inp('t-min', `inputmode="decimal" value="0.2"`, 'km'))}
         </div>
         <div class="calc" id="t-count"></div>
         <button class="btn primary" id="t-go">Import rides</button></div>`;
       const pick = () => {
-        const ty = new Set([...out.querySelectorAll('.typelist input:checked')].map(i => i.value));
+        const ty = [...out.querySelectorAll('.typelist input:checked')].map(i => i.value), tys = new Set(ty);
         const from = new Date(out.querySelector('#t-from').value + 'T00:00').getTime() || 0, min = num(out.querySelector('#t-min').value);
-        const sel = res.trips.filter(t => ty.has(t.type) && t.start >= from && t.km >= min);
-        const have = new Set(S.rides.map(r => r.id));
-        const fresh = sel.filter(t => !have.has(t.id));
-        return { fresh, dup: sel.length - fresh.length };
+        const sel = res.trips.filter(t => tys.has(t.type) && t.start >= from && t.km >= min);
+        const fresh = sel.filter(t => !Core.overlaps(t, S.rides));
+        return { ty, fresh, dup: sel.length - fresh.length };
       };
-      const upd = () => { const p = pick(); out.querySelector('#t-count').innerHTML = `Will import <b>${nf0.format(p.fresh.length)} rides</b> · ${kmf(p.fresh.reduce((s, t) => s + t.km, 0))} km${p.dup ? ` (${p.dup} already in your log are skipped)` : ''}.`; out.querySelector('#t-go').disabled = !p.fresh.length; };
+      const upd = () => {
+        const p = pick();
+        out.querySelector('#t-count').innerHTML = p.fresh.length
+          ? `Will import <b>${nf0.format(p.fresh.length)} new rides</b> · ${kmf(p.fresh.reduce((s, t) => s + t.km, 0))} km${p.dup ? `. ${nf0.format(p.dup)} already in your log will be skipped.` : '.'}`
+          : p.dup ? `All ${nf0.format(p.dup)} matching rides are already in your log. Nothing new to import.` : 'No trips match. Tick a trip type above.';
+        out.querySelector('#t-go').disabled = !p.fresh.length;
+      };
       out.addEventListener('input', upd); out.addEventListener('change', upd); upd();
       out.querySelector('#t-go').onclick = async () => {
         const p = pick(), btn = out.querySelector('#t-go'); btn.disabled = true; btn.textContent = 'Importing…';
-        const rides = p.fresh.map(t => ({ id: t.id, start: t.start, end: t.end, km: t.km, src: 'timeline', path: Core.simplify(t.path, 32), title: '', gType: t.type }));
-        try { await Store.saveRides(rides); closeSheet(); toast(`Imported ${nf0.format(rides.length)} rides`); location.hash = 'rides'; }
+        lsSet(IMPORT_TYPES_KEY, JSON.stringify(p.ty));
+        const rides = p.fresh.map(t => ({ id: t.id, start: t.start, end: t.end, km: t.km, approx: !!t.approx, src: 'timeline', path: Core.simplify(t.path, PATH_MAX), title: Core.rideTitle(t.from, t.to), gType: t.type }));
+        try { await Store.saveRides(rides); lsSet(LAST_IMPORT_KEY, String(Date.now())); closeSheet(); toast(`Imported ${nf0.format(rides.length)} rides`); location.hash = 'rides'; }
         catch (e) { btn.disabled = false; btn.textContent = 'Import rides'; }
       };
     };
+    root.querySelector('#t-file').onchange = ev => { const f = ev.target.files[0]; if (f) handle(() => f.text(), f.name); };
+    if (pre) handle(() => Promise.resolve(pre.text), pre.name);
   });
+}
+async function checkShared() {
+  if (IN_CLAUDE || !/[?&]shared=1/.test(location.search) || !('caches' in window)) return;
+  try { history.replaceState(null, '', location.pathname + (location.hash || '#rides')); } catch (e) { }
+  try {
+    const c = await caches.open('off-road-share'), res = await c.match('shared-timeline');
+    if (!res) return toast("The shared file didn't arrive. Use Rides → Import Google Timeline instead.");
+    const text = await res.text(), name = decodeURIComponent(res.headers.get('x-name') || 'Timeline.json');
+    await c.delete('shared-timeline');
+    if (location.hash !== '#rides') location.hash = 'rides';
+    sheetImport({ text, name });
+  } catch (e) { toast("Couldn't open the shared file. Use Rides → Import Google Timeline instead."); }
 }
 
 /* ---------- Live GPS ride ---------- */
@@ -1261,7 +1398,7 @@ async function liveAction(a) {
   if (a === 'discard') { if (!T.armed) { T.armed = true; return drawLive(); } closeLive(); return toast('Ride discarded'); }
   if (a === 'stop') {
     if (T.km < 0.05) { closeLive(); return toast('Ride too short to save'); }
-    const r = { id: 'gps-' + T.start, start: T.start, end: T.lastT || Date.now(), km: Math.round(T.km * 100) / 100, src: 'gps', path: Core.simplify(T.pts, 60), maxKmh: Math.round(T.maxKmh), title: '' };
+    const r = { id: 'gps-' + T.start, start: T.start, end: T.lastT || Date.now(), km: Math.round(T.km * 100) / 100, src: 'gps', path: Core.simplify(T.pts, PATH_MAX), maxKmh: Math.round(T.maxKmh), title: '' };
     closeLive();
     try { await Store.saveRides([r]); toast(`Saved ${nf1.format(r.km)} km ride`); } catch (e) { }
   }
@@ -1283,10 +1420,11 @@ function exportCsv() {
 
 /* ---------- Events ---------- */
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-act],[data-edit-ride],[data-edit-fill],[data-edit-exp],[data-filter],[data-rep],[data-rep-step],[data-live]');
+  const t = e.target.closest('[data-act],[data-view-ride],[data-edit-ride],[data-edit-fill],[data-edit-exp],[data-filter],[data-rep],[data-rep-step],[data-live]');
   if (!t) return;
   const d = data();
   if (t.dataset.live) return liveAction(t.dataset.live);
+  if (t.dataset.viewRide) { const r = d.rides.find(x => x.id === t.dataset.viewRide); return r && sheetRideView(r, d); }
   if (t.dataset.editRide) { const r = d.rides.find(x => x.id === t.dataset.editRide); return r && sheetRide(r); }
   if (t.dataset.editFill) { const r = d.fills.find(x => x.id === t.dataset.editFill); return r && sheetFuel(r); }
   if (t.dataset.editExp) { const r = d.exp.find(x => x.id === t.dataset.editExp); return r && sheetExp(r); }
@@ -1315,7 +1453,7 @@ document.addEventListener('click', e => {
     case 'live-save': {
       const p = pendingLive(); if (!p) return render();
       clearLive();
-      return Store.saveRides([{ id: 'gps-' + p.start, start: p.start, end: p.at || Date.now(), km: Math.round(p.km * 100) / 100, src: 'gps', path: Core.simplify(p.pts || [], 60), maxKmh: Math.round(p.maxKmh || 0), title: '' }])
+      return Store.saveRides([{ id: 'gps-' + p.start, start: p.start, end: p.at || Date.now(), km: Math.round(p.km * 100) / 100, src: 'gps', path: Core.simplify(p.pts || [], PATH_MAX), maxKmh: Math.round(p.maxKmh || 0), title: '' }])
         .then(() => { toast(`Saved ${nf1.format(p.km)} km ride`); render(); }, () => { });
     }
     case 'export-csv': return exportCsv();
@@ -1335,7 +1473,7 @@ if (!IN_CLAUDE) {
 }
 S.view = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
 render();
-Store.init();
+Store.init().then(checkShared);
 
 </script>
 </body>

@@ -42,5 +42,22 @@
       "name": "Reports",
       "url": "./#reports"
     }
-  ]
+  ],
+  "share_target": {
+    "action": "./share-timeline",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "timeline",
+          "accept": [
+            "application/json",
+            ".json",
+            "text/plain"
+          ]
+        }
+      ]
+    }
+  }
 }
