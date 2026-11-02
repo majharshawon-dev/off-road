@@ -1,0 +1,1342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#13171C">
+<meta name="description" content="Motorcycle log: rides, Google Timeline import, mileage, refuels, range, bike costs and reports.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Off Road">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Off Road</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&family=Saira+Condensed:wght@500;600;700&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px)}body{margin:0}img{max-width:100%}html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+/* Layout: phone-first single column (max 760px) under a sticky bike header, fixed bottom tab bar.
+   Home opens on a dark instrument-cluster panel: fuel gauge arc, range, mileage, boxed odometer digits. */
+:root{
+  --bg:#E8EBEE; --surface:#FFFFFF; --sunk:#F2F4F6; --ink:#15181C; --muted:#5A6470; --line:#D2D8DF;
+  --accent:#D4470E; --accent-ink:#FFFFFF; --accent-soft:#FBE6DC;
+  --fuel:#B86E00; --good:#2B8A3E; --warn:#B86E00; --bad:#C92A2A;
+  --cluster:#13171C; --cluster-2:#1B2027; --cluster-ink:#EEF1F3; --cluster-dim:#8792A0; --cluster-line:#2C343D;
+  --gauge-fuel:#F2A33A; --gauge-res:#E5484D; --needle:#FF6A2B;
+  --shadow:0 1px 2px rgba(20,24,28,.06),0 4px 16px rgba(20,24,28,.06);
+  --f-display:"Saira Condensed","Arial Narrow",Roboto Condensed,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --r:12px; --nav-h:64px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0E1114; --surface:#171B20; --sunk:#12161A; --ink:#E7EBEF; --muted:#8C96A2; --line:#2A3139;
+  --accent:#FF6A2B; --accent-ink:#1A0C04; --accent-soft:#3A1E12;
+  --fuel:#F2A33A; --good:#5CC971; --warn:#F2A33A; --bad:#FF6B6B;
+  --cluster:#090C0F; --cluster-2:#11161B; --cluster-ink:#EEF1F3; --cluster-dim:#7F8A97; --cluster-line:#232A32;
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1114; --surface:#171B20; --sunk:#12161A; --ink:#E7EBEF; --muted:#8C96A2; --line:#2A3139;
+  --accent:#FF6A2B; --accent-ink:#1A0C04; --accent-soft:#3A1E12;
+  --fuel:#F2A33A; --good:#5CC971; --warn:#F2A33A; --bad:#FF6B6B;
+  --cluster:#090C0F; --cluster-2:#11161B; --cluster-ink:#EEF1F3; --cluster-dim:#7F8A97; --cluster-line:#232A32;
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;
+  padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 24px)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:760px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg)}
+.top .wrap{display:flex;align-items:center;gap:12px;padding-block:12px}
+.brand{flex:1;min-width:0}
+.brand small{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.brand h1{margin:0;font-family:var(--f-display);font-weight:700;font-size:26px;line-height:1.05;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:none}
+.icon-btn svg{width:20px;height:20px}
+svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+main .wrap{display:flex;flex-direction:column;gap:20px;padding-block:4px 8px}
+h2.sec{font-family:var(--f-display);font-weight:600;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;display:flex;align-items:baseline;gap:8px}
+h2.sec .r{margin-left:auto;letter-spacing:0;text-transform:none;font-family:var(--f-body);font-size:13px;font-weight:500}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+
+/* sample banner */
+.banner{display:flex;gap:12px;align-items:flex-start;background:var(--accent-soft);border:1px dashed var(--accent);border-radius:var(--r);padding:12px 14px;font-size:14px}
+.banner p{margin:0;flex:1;min-width:0}
+.banner b{font-weight:700}
+.banner .stack{display:flex;flex-direction:column;gap:6px;flex:none}
+.note{font-size:13px;color:var(--muted);background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+
+/* instrument cluster */
+.cluster{background:var(--cluster);color:var(--cluster-ink);border-radius:18px;padding:18px 18px 16px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:8px 18px;position:relative;overflow:hidden;
+  background-image:radial-gradient(120% 90% at 20% 0%,var(--cluster-2),transparent 60%)}
+.gauge svg{width:100%;height:auto;display:block}
+.gauge .t{fill:var(--cluster-dim);font-family:var(--f-display);font-weight:600;font-size:13px}
+.gauge .v{fill:var(--cluster-ink);font-family:var(--f-mono);font-size:15px;font-weight:500}
+.readouts{display:flex;flex-direction:column;justify-content:center;gap:14px;min-width:0}
+.ro .lbl{display:block;font-family:var(--f-display);font-size:12px;letter-spacing:.16em;color:var(--cluster-dim);font-weight:600}
+.ro .big{display:block;font-family:var(--f-display);font-weight:700;font-size:52px;line-height:.95;font-variant-numeric:tabular-nums}
+.ro .mid{display:block;font-family:var(--f-display);font-weight:600;font-size:30px;line-height:1}
+.ro small{font-size:.42em;font-weight:500;margin-left:4px;color:var(--cluster-dim);letter-spacing:.04em}
+.ro .sub{display:block;font-size:12.5px;color:var(--cluster-dim);margin-top:3px}
+.ro .sub.warn{color:var(--gauge-fuel)} .ro .sub.bad{color:var(--gauge-res)}
+.odo{grid-column:1/-1;display:flex;align-items:center;gap:10px;border:0;border-top:1px solid var(--cluster-line);background:none;color:inherit;padding:12px 0 0;margin-top:2px;text-align:left}
+.odo .lbl{font-family:var(--f-display);font-size:12px;letter-spacing:.16em;color:var(--cluster-dim);font-weight:600}
+.digits{display:flex;gap:3px}
+.digits span{font-family:var(--f-mono);font-size:17px;width:1.32em;text-align:center;padding:4px 0;background:#000;color:#F4F6F8;border-radius:3px;box-shadow:inset 0 -9px 0 rgba(255,255,255,.04)}
+.digits span.dec{background:var(--needle);color:#1A0C04}
+.odo .km{font-family:var(--f-display);color:var(--cluster-dim);font-size:14px}
+.odo .edit{margin-left:auto;font-size:12px;color:var(--cluster-dim);text-decoration:underline;text-underline-offset:3px}
+.cluster .hint{grid-column:1/-1;font-size:13px;color:var(--cluster-dim);margin:0}
+@media (max-width:480px){ .cluster{grid-template-columns:1fr;} .readouts{flex-direction:row;justify-content:space-between} .ro .big{font-size:44px} .digits span{font-size:15px}}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.stat{background:var(--surface);padding:12px 14px;min-width:0}
+.stat .k{font-size:12px;color:var(--muted);font-weight:500}
+.stat .v{font-family:var(--f-display);font-weight:700;font-size:24px;line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .v small{font-size:.55em;font-weight:500;color:var(--muted);margin-left:2px}
+.stat .s{font-size:12px;color:var(--muted)}
+@media (max-width:560px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.foot{font-size:13px;color:var(--muted);margin-top:8px}
+
+/* buttons */
+.actions{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:10px 16px;border-radius:11px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:14.5px;text-align:center}
+.btn svg{width:18px;height:18px;flex:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--bad);border-color:var(--bad);background:transparent}
+.btn.small{min-height:36px;padding:6px 12px;font-size:13.5px;border-radius:9px}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.block{width:100%}
+.row-btns{display:flex;gap:10px;flex-wrap:wrap}
+.row-btns .btn{flex:1 1 140px}
+@media (max-width:420px){.actions{grid-template-columns:1fr 1fr}.actions .btn:first-child{grid-column:1/-1}}
+
+/* lists */
+.list{list-style:none;margin:0;padding:0}
+.item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line);width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left}
+.list .item:first-child{border-top:0}
+button.item:hover{background:var(--sunk)}
+.badge{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:none;background:var(--sunk);color:var(--muted)}
+.badge svg{width:20px;height:20px}
+.badge.fuel{color:var(--fuel)} .badge.ride{color:var(--accent)}
+.route{width:52px;height:40px;flex:none;border-radius:8px;background:var(--sunk)}
+.route path{fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.route circle{fill:var(--ink)}
+.item .main{flex:1;min-width:0}
+.item .t1{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .t2{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .val{text-align:right;flex:none}
+.item .val b{display:block;font-family:var(--f-display);font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+.item .val span{font-size:12px;color:var(--muted)}
+.chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);vertical-align:1px}
+.chip.good{color:var(--good);border-color:currentColor} .chip.warn{color:var(--warn);border-color:currentColor} .chip.bad{color:var(--bad);border-color:currentColor}
+.month-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.month-h b{font-family:var(--f-display);font-size:16px;color:var(--ink);letter-spacing:.02em}
+.group{overflow:hidden}
+.empty{text-align:center;padding:28px 18px;color:var(--muted)}
+.empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+.more{display:flex;justify-content:center;padding:10px}
+
+/* bars */
+.bars{display:flex;flex-direction:column;gap:12px;padding:16px}
+.bar-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:baseline}
+.bar-row .n{font-size:14px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-row .a{font-variant-numeric:tabular-nums;font-weight:600;font-size:14px}
+.bar-row .a span{color:var(--muted);font-weight:400;font-size:12px;margin-left:6px}
+.track{grid-column:1/-1;height:8px;border-radius:4px;background:var(--sunk);overflow:hidden}
+.track i{display:block;height:100%;border-radius:4px;background:var(--ink);opacity:.82}
+.track i.fuel{background:var(--fuel);opacity:1}
+
+/* hero total */
+.total{padding:18px 18px 16px}
+.total .k{font-size:13px;color:var(--muted)}
+.total .v{font-family:var(--f-display);font-size:46px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+.total .s{font-size:13px;color:var(--muted)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chips button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:500}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* charts */
+.chart{padding:14px 12px 8px}
+.chart svg{width:100%;height:auto;display:block}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .ax{fill:var(--muted);font-size:11px;font-family:var(--f-body)}
+.chart .b-fuel{fill:var(--fuel)} .chart .b-other{fill:var(--ink);opacity:.78} .chart .b-km{fill:var(--accent)}
+.chart .ln{fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linejoin:round}
+.chart .area{fill:var(--accent);opacity:.1}
+.chart .avg{stroke:var(--muted);stroke-dasharray:4 4;stroke-width:1.2}
+.chart .dot{fill:var(--surface);stroke:var(--accent);stroke-width:2}
+.chart .dot.end{fill:var(--accent)}
+.chart .lbl{fill:var(--ink);font-size:12px;font-weight:600;font-family:var(--f-body)}
+.legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted);padding:0 16px 12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:9px 12px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:12px;border-top:0}
+th:first-child,td:first-child{text-align:left}
+tr.tot td{font-weight:700}
+
+/* report nav */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:8px 16px;font-weight:600;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.period{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.period .lab{font-family:var(--f-display);font-size:24px;font-weight:700;flex:1;text-align:center;min-width:140px}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.nav .wrap{display:grid;grid-template-columns:repeat(5,1fr);height:var(--nav-h)}
+.nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:600;letter-spacing:.02em}
+.nav a svg{width:22px;height:22px}
+.nav a[aria-current="page"]{color:var(--accent)}
+
+/* sheet */
+.scrim{position:fixed;inset:0;z-index:40;background:rgba(8,10,12,.5);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;
+  padding:0 max(18px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px))}
+@media (min-width:640px){.scrim{align-items:center}.sheet{border-radius:18px;max-height:88%}}
+.sheet header{position:sticky;top:0;background:var(--surface);display:flex;align-items:center;gap:8px;padding:16px 0 10px;z-index:1}
+.sheet h3{margin:0;flex:1;font-family:var(--f-display);font-size:24px;font-weight:700}
+.form{display:flex;flex-direction:column;gap:14px}
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label,.flabel{font-size:13px;font-weight:600;color:var(--muted)}
+.field input,.field select,.field textarea{width:100%;min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--sunk);padding:10px 12px;font-size:16px}
+.field input:focus,.field select:focus{border-color:var(--accent);outline:none}
+.field .hint{font-size:12.5px;color:var(--muted)}
+.unit{position:relative}
+.unit input{padding-right:46px}
+.unit em{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-style:normal;color:var(--muted);font-size:14px;pointer-events:none}
+.switch{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--sunk)}
+.switch input{width:22px;height:22px;accent-color:var(--accent)}
+.switch div{flex:1}
+.switch small{display:block;color:var(--muted);font-size:12.5px}
+.catpick{display:flex;flex-wrap:wrap;gap:8px}
+.catpick button{border:1px solid var(--line);background:var(--sunk);border-radius:999px;padding:7px 12px;font-size:13.5px}
+.catpick button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.calc{font-size:13.5px;color:var(--muted);background:var(--sunk);border-radius:10px;padding:10px 12px}
+.calc b{color:var(--ink)}
+.steps{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:6px}
+.typelist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.typelist label{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line);font-size:14px}
+.typelist label:first-child{border-top:0}
+.typelist input{width:20px;height:20px;accent-color:var(--accent)}
+.typelist span{flex:1}
+.typelist em{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
+.divider{border:0;border-top:1px solid var(--line);margin:4px 0}
+
+/* live ride */
+.live{position:fixed;inset:0;z-index:50;background:var(--cluster);color:var(--cluster-ink);display:flex;flex-direction:column;
+  padding:calc(20px + env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px))}
+.live .st{font-family:var(--f-display);letter-spacing:.16em;font-size:13px;color:var(--cluster-dim);display:flex;align-items:center;gap:8px}
+.live .st i{width:9px;height:9px;border-radius:50%;background:var(--gauge-res)}
+.live .st i.on{background:#5CC971;animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.live .st i.on{animation:none}}
+.live .center{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center}
+.live .km{font-family:var(--f-display);font-weight:700;font-size:min(30vw,150px);line-height:.9;font-variant-numeric:tabular-nums}
+.live .km small{font-size:.22em;color:var(--cluster-dim);margin-left:6px}
+.live .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:520px;margin-top:22px}
+.live .grid3 div{border-top:1px solid var(--cluster-line);padding-top:8px}
+.live .grid3 b{display:block;font-family:var(--f-mono);font-size:20px;font-weight:500}
+.live .grid3 span{font-size:12px;color:var(--cluster-dim);letter-spacing:.06em}
+.live .msg{max-width:440px;color:var(--cluster-dim);font-size:14.5px;margin:12px auto 0}
+.live .msg.err{color:var(--cluster-ink);background:var(--cluster-2);border:1px solid var(--cluster-line);border-radius:12px;padding:14px}
+.live .btns{display:flex;gap:10px;max-width:520px;width:100%;margin:0 auto}
+.live .btns .btn{flex:1;background:var(--cluster-2);border-color:var(--cluster-line);color:var(--cluster-ink)}
+.live .btns .btn.primary{background:var(--needle);border-color:var(--needle);color:#1A0C04}
+
+/* toast */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 14px);z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,460px);box-shadow:var(--shadow)}
+
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="brand"><small>Off Road</small><h1 id="bike-name">My bike</h1></div>
+  <button class="icon-btn" data-act="settings" aria-label="Bike and settings"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
+</div></header>
+<main><div class="wrap" id="view"></div></main>
+<nav class="nav" aria-label="Sections"><div class="wrap">
+  <a href="#home" data-v="home"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4.5-5"/><path d="M7 20h10"/></svg>Home</a>
+  <a href="#rides" data-v="rides"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/></svg>Rides</a>
+  <a href="#fuel" data-v="fuel"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15"/><path d="M4 20h11"/><path d="M7.5 8h4"/><path d="M14 10h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>Refuels</a>
+  <a href="#costs" data-v="costs"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>Costs</a>
+  <a href="#reports" data-v="reports"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/></svg>Reports</a>
+</div></nav>
+<div class="scrim" id="scrim" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <header><h3 id="sheet-title"></h3><button class="icon-btn" data-act="close-sheet" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div id="sheet-body"></div>
+</div></div>
+<div class="live" id="live" hidden role="dialog" aria-modal="true" aria-label="Ride in progress"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script>
+/* ---------- Core: pure calculations (no DOM) ---------- */
+const Core = (() => {
+  const MIN = 60000;
+
+  function parseLatLng(v) {
+    if (v == null) return null;
+    if (typeof v === 'object') {
+      if ('latitudeE7' in v) return [v.latitudeE7 / 1e7, v.longitudeE7 / 1e7];
+      if ('latE7' in v) return [v.latE7 / 1e7, v.lngE7 / 1e7];
+      if (v.latLng) return parseLatLng(v.latLng);
+      if ('lat' in v && ('lng' in v || 'lon' in v)) return [+v.lat, +(v.lng ?? v.lon)];
+      return null;
+    }
+    const s = String(v).replace(/^geo:/, '');
+    const m = s.match(/(-?\d+(?:\.\d+)?)\s*°?\s*,\s*(-?\d+(?:\.\d+)?)/);
+    return m ? [+m[1], +m[2]] : null;
+  }
+
+  function hav(a, b) {
+    const R = 6371, t = x => x * Math.PI / 180;
+    const dLat = t(b[0] - a[0]), dLng = t(b[1] - a[1]);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(t(a[0])) * Math.cos(t(b[0])) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function pathKm(p) { let d = 0; for (let i = 1; i < p.length; i++) d += hav(p[i - 1], p[i]); return d; }
+  function simplify(path, max = 60) {
+    if (path.length <= max) return path;
+    const step = (path.length - 1) / (max - 1), out = [];
+    for (let i = 0; i < max; i++) out.push(path[Math.round(i * step)]);
+    return out;
+  }
+  const r5 = n => Math.round(n * 1e5) / 1e5;
+  function normType(t) { return String(t || 'UNKNOWN').trim().toUpperCase().replace(/[\s-]+/g, '_'); }
+  function toMs(v) {
+    if (v == null || v === '') return NaN;
+    if (typeof v === 'number') return v;
+    if (/^\d+$/.test(v)) return +v;
+    return Date.parse(v);
+  }
+
+  /* ---- Google Timeline import ---- */
+  function parseTimeline(json) {
+    let segs;
+    if (Array.isArray(json)) segs = json;
+    else if (json && Array.isArray(json.semanticSegments)) segs = json.semanticSegments;
+    else if (json && Array.isArray(json.timelineObjects)) return parseSemantic(json.timelineObjects);
+    else if (json && Array.isArray(json.locations))
+      throw new Error('This is a raw location file (Records.json). It has no trips in it. Export "Timeline data" from Google Maps instead.');
+    else throw new Error("This file doesn't look like a Google Timeline export.");
+
+    const pts = [], trips = [];
+    for (const s of segs) {
+      if (!s || typeof s !== 'object') continue;
+      const st = toMs(s.startTime), en = toMs(s.endTime);
+      if (Array.isArray(s.timelinePath)) {
+        for (const p of s.timelinePath) {
+          const ll = parseLatLng(p.point);
+          let t = toMs(p.time);
+          if (isNaN(t) && p.durationMinutesOffsetFromStartTime != null && !isNaN(st))
+            t = st + (+p.durationMinutesOffsetFromStartTime) * MIN;
+          if (ll && !isNaN(t)) pts.push([t, ll[0], ll[1]]);
+        }
+      }
+      const a = s.activity;
+      if (a && !isNaN(st) && !isNaN(en)) {
+        const tc = a.topCandidate || {};
+        trips.push({ start: st, end: en, type: normType(tc.type), distM: +a.distanceMeters || 0,
+          a: parseLatLng(a.start), b: parseLatLng(a.end) });
+      }
+    }
+    pts.sort((x, y) => x[0] - y[0]);
+    for (const t of trips) {
+      let lo = 0, hi = pts.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (pts[m][0] < t.start - MIN) lo = m + 1; else hi = m; }
+      const path = [];
+      for (let i = lo; i < pts.length && pts[i][0] <= t.end + MIN; i++) path.push([pts[i][1], pts[i][2]]);
+      t.path = path;
+    }
+    return finish(trips);
+  }
+
+  function parseSemantic(objs) {
+    const trips = [];
+    for (const o of objs) {
+      const s = o && o.activitySegment;
+      if (!s) continue;
+      const d = s.duration || {};
+      const st = toMs(d.startTimestamp ?? d.startTimestampMs), en = toMs(d.endTimestamp ?? d.endTimestampMs);
+      if (isNaN(st) || isNaN(en)) continue;
+      const type = normType(s.activityType || (s.activities && s.activities[0] && s.activities[0].activityType));
+      const wp = (s.waypointPath && s.waypointPath.waypoints) || (s.simplifiedRawPath && s.simplifiedRawPath.points) || [];
+      trips.push({ start: st, end: en, type,
+        distM: +s.distance || +(s.waypointPath && s.waypointPath.distanceMeters) || 0,
+        a: parseLatLng(s.startLocation), b: parseLatLng(s.endLocation),
+        path: wp.map(parseLatLng).filter(Boolean) });
+    }
+    return finish(trips);
+  }
+
+  function finish(trips) {
+    const types = {};
+    let min = Infinity, max = -Infinity;
+    const out = trips.map(t => {
+      let path = t.path || [];
+      if (t.a && (!path.length || hav(path[0], t.a) > 0.05)) path.unshift(t.a);
+      if (t.b && (!path.length || hav(path[path.length - 1], t.b) > 0.05)) path.push(t.b);
+      let km = t.distM / 1000, approx = false;
+      if (!km) { km = path.length > 1 ? pathKm(path) : 0; approx = path.length <= 2; if (approx) km *= 1.25; }
+      types[t.type] = (types[t.type] || 0) + 1;
+      min = Math.min(min, t.start); max = Math.max(max, t.end);
+      return { id: 'tl-' + t.start, start: t.start, end: t.end, type: t.type,
+        km: Math.round(km * 100) / 100, approx,
+        path: simplify(path, 48).map(p => [r5(p[0]), r5(p[1])]) };
+    });
+    return { trips: out, types, from: min, to: max };
+  }
+
+  /* ---- Mileage (full tank to full tank) ---- */
+  function fuelStats(fills) {
+    const f = fills.filter(x => x.odo > 0 && x.liters > 0).sort((a, b) => a.odo - b.odo || a.at - b.at);
+    const per = {}, series = [];
+    let lastFull = null, acc = 0, dist = 0, lit = 0;
+    for (const x of f) {
+      if (lastFull) {
+        acc += x.liters;
+        if (x.full) {
+          const d = x.odo - lastFull.odo;
+          if (d > 0 && acc > 0) {
+            per[x.id] = { kmpl: d / acc, dist: d, liters: acc };
+            dist += d; lit += acc;
+            series.push({ at: x.at, kmpl: d / acc });
+          }
+          lastFull = x; acc = 0;
+        }
+      } else if (x.full) { lastFull = x; acc = 0; }
+    }
+    const liters = fills.reduce((s, x) => s + (+x.liters || 0), 0);
+    const cost = fills.reduce((s, x) => s + (+x.total || 0), 0);
+    return {
+      per, series,
+      avg: lit ? dist / lit : null,
+      last: series.length ? series[series.length - 1].kmpl : null,
+      liters, cost, pricePerL: liters ? cost / liters : null,
+    };
+  }
+
+  /* ---- Fuel left & range ---- */
+  function tankEstimate({ fills, tankL, reserveL, kmpl, odoNow, rideKmAfter }) {
+    if (!kmpl || !tankL) return null;
+    const f = fills.filter(x => x.odo > 0).sort((a, b) => a.odo - b.odo || a.at - b.at);
+    let i = -1;
+    for (let k = f.length - 1; k >= 0; k--) if (f[k].full) { i = k; break; }
+    if (i < 0) return null;
+    let fuel = tankL, odo = f[i].odo;
+    for (let j = i + 1; j < f.length; j++) {
+      fuel = Math.max(0, fuel - (f[j].odo - odo) / kmpl);
+      fuel = Math.min(tankL, fuel + f[j].liters);
+      odo = f[j].odo;
+    }
+    const last = f[f.length - 1];
+    const kmSince = Math.max(0, (odoNow || 0) - last.odo, rideKmAfter ? rideKmAfter(last.at) : 0);
+    fuel = Math.min(tankL, Math.max(0, fuel - kmSince / kmpl));
+    return {
+      fuel, pct: fuel / tankL, range: fuel * kmpl,
+      toReserve: Math.max(0, fuel - reserveL) * kmpl,
+      fullRange: tankL * kmpl, kmSince, onReserve: fuel <= reserveL, lastAt: last.at,
+    };
+  }
+
+  /* ---- Reports ---- */
+  function summarize(d, from, to, stats) {
+    const inR = at => at >= from && at < to;
+    const rides = d.rides.filter(r => inR(r.start));
+    const fills = d.fills.filter(x => inR(x.at));
+    const exp = d.exp.filter(x => inR(x.at));
+    const rideKm = rides.reduce((s, r) => s + (+r.km || 0), 0);
+    const rideMin = rides.reduce((s, r) => s + Math.max(0, (r.end - r.start) / MIN), 0);
+    const liters = fills.reduce((s, x) => s + (+x.liters || 0), 0);
+    const fuelCost = fills.reduce((s, x) => s + (+x.total || 0), 0);
+    let mDist = 0, mLit = 0;
+    for (const x of fills) { const p = stats.per[x.id]; if (p) { mDist += p.dist; mLit += p.liters; } }
+    const cats = {};
+    for (const x of exp) cats[x.cat] = (cats[x.cat] || 0) + (+x.amount || 0);
+    const otherCost = exp.reduce((s, x) => s + (+x.amount || 0), 0);
+    const odos = [...fills.map(x => x.odo), ...exp.map(x => x.odo), ...rides.map(r => r.odoEnd)].filter(v => v > 0);
+    const odoKm = odos.length > 1 ? Math.max(...odos) - Math.min(...odos) : 0;
+    const basisKm = Math.max(rideKm, odoKm);
+    const total = fuelCost + otherCost;
+    return {
+      rides: rides.length, rideKm, rideMin, liters, fuelCost, otherCost, total, cats,
+      kmpl: mLit ? mDist / mLit : null, odoKm, basisKm,
+      basis: odoKm > rideKm ? 'odometer' : 'rides',
+      costPerKm: basisKm ? total / basisKm : null, fillCount: fills.length, expCount: exp.length,
+    };
+  }
+
+  function niceScale(max, ticks = 4) {
+    if (!(max > 0)) return { max: ticks, step: 1 };
+    const raw = max / ticks, p = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= raw);
+    return { max: step * ticks, step };
+  }
+
+  return { parseLatLng, hav, pathKm, simplify, parseTimeline, fuelStats, tankEstimate, summarize, niceScale, toMs };
+})();
+
+
+/* ---------- Helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf0 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const tk = n => '৳' + nf0.format(Math.round(n || 0));
+const kmf = n => (n || 0) >= 100 ? nf0.format(n) : nf1.format(n || 0);
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const fDate = ms => { const d = new Date(ms); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
+const fDay = ms => { const d = new Date(ms); return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`; };
+const fTime = ms => { const d = new Date(ms); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const fDur = min => { min = Math.round(min); return min >= 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`; };
+const monthKey = ms => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const toInput = ms => { const d = new Date(ms); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const fromInput = v => { const t = new Date(v).getTime(); return isNaN(t) ? Date.now() : t; };
+const uid = p => p + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const num = v => { const n = parseFloat(String(v).replace(/,/g, '')); return isNaN(n) ? 0 : n; };
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } };
+
+const I = {
+  home: '<path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4.5-5"/><path d="M7 20h10"/>',
+  ride: '<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/>',
+  fuel: '<path d="M5 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15"/><path d="M4 20h11"/><path d="M7.5 8h4"/><path d="M14 10h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V8l-3-3"/>',
+  cost: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  chart: '<path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
+  set: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  play: '<path d="M8 5.5v13l11-6.5z"/>',
+  pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  up: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/>',
+  down: '<path d="M12 4v12M7 11l5 5 5-5"/><path d="M5 20h14"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  left: '<path d="M15 5l-7 7 7 7"/>', right: '<path d="M9 5l7 7-7 7"/>',
+  wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L12 19a2.1 2.1 0 0 1-3-3l7.5-7.5"/><path d="M14.5 6.5L17 4l3 3-2.5 2.5"/>',
+};
+const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n]}</svg>`;
+
+const CATS = ['Service', 'Engine oil', 'Parts & repair', 'Tyres', 'Tax token & papers', 'Insurance', 'Parking & toll', 'Wash', 'Gear & accessories', 'Other'];
+const IN_CLAUDE = !!(window.claude && typeof window.claude.use === 'function');
+const DEF = { bikeName: 'My bike', tankL: 12, reserveL: 2, estKmpl: 40, odo: 0 };
+const TYPE_NAMES = {
+  MOTORCYCLING: 'Motorcycling', IN_PASSENGER_VEHICLE: 'Driving (in a vehicle)', IN_VEHICLE: 'In a vehicle', IN_ROAD_VEHICLE: 'Road vehicle',
+  DRIVING: 'Driving', IN_CAR: 'Car', IN_TAXI: 'Taxi', IN_BUS: 'Bus', IN_TRAIN: 'Train', IN_SUBWAY: 'Metro / subway', IN_TRAM: 'Tram',
+  IN_FERRY: 'Ferry', FLYING: 'Flying', CYCLING: 'Cycling (bicycle)', ON_BICYCLE: 'Cycling (bicycle)', WALKING: 'Walking', RUNNING: 'Running',
+  ON_FOOT: 'On foot', HIKING: 'Hiking', SAILING: 'Boat', UNKNOWN_ACTIVITY_TYPE: 'Unknown', UNKNOWN: 'Unknown',
+};
+const DEFAULT_TYPES = ['MOTORCYCLING', 'IN_PASSENGER_VEHICLE', 'IN_VEHICLE', 'IN_ROAD_VEHICLE', 'DRIVING'];
+
+/* ---------- State ---------- */
+const S = {
+  garage: { ...DEF }, rideMonths: {}, rides: [], fills: [], exp: [],
+  hideSample: lsGet('ride-hide-sample') === '1', note: '',
+  view: 'home', rideMonthsShown: 3, costFilter: 'All',
+  rep: { kind: 'month', y: new Date().getFullYear(), m: new Date().getMonth() },
+};
+const flatten = m => Object.values(m).flatMap(o => Object.values(o || {})).sort((a, b) => b.start - a.start);
+const hasReal = () => S.rides.length || S.fills.length || S.exp.length;
+
+/* ---------- Sample data (shown until real data exists) ---------- */
+let SAMPLE = null;
+function sample() {
+  if (SAMPLE) return SAMPLE;
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const now = Date.now(), day = 864e5, rides = [], fills = [], exp = [];
+  let odo = 12480, sinceFill = 0;
+  const startDay = new Date(now - 118 * day); startDay.setHours(0, 0, 0, 0);
+  fills.push({ id: 's-f0', at: startDay.getTime() + 9 * 36e5, odo, liters: 11.2, total: 11.2 * 122, full: true, station: 'Meghna Petroleum, Mohakhali' });
+  const walk = (km) => {
+    let p = [23.7806 + rnd() * 0.02, 90.4074 + rnd() * 0.03], out = [p.slice()], h = rnd() * 6.28;
+    const n = 10, step = km / n / 111;
+    for (let i = 0; i < n; i++) { h += (rnd() - 0.5) * 0.9; p = [p[0] + Math.sin(h) * step, p[1] + Math.cos(h) * step]; out.push([+p[0].toFixed(5), +p[1].toFixed(5)]); }
+    return out;
+  };
+  for (let d = 0; d < 118; d++) {
+    const base = startDay.getTime() + d * day, dow = new Date(base).getDay();
+    const trips = [];
+    if (dow !== 5 && dow !== 6) { const k = 7 + rnd() * 3; trips.push([8.5 + rnd(), k], [18 + rnd(), k + rnd()]); }
+    else if (rnd() < 0.45) trips.push([7 + rnd() * 2, 35 + rnd() * 90]);
+    if (rnd() < 0.25) trips.push([13 + rnd() * 3, 3 + rnd() * 8]);
+    for (const [h, k] of trips) {
+      const st = base + h * 36e5, dur = (k / (22 + rnd() * 14)) * 60;
+      rides.push({ id: 's-r' + rides.length, start: st, end: st + dur * 6e4, km: +k.toFixed(1), src: rnd() < 0.7 ? 'timeline' : 'gps', path: walk(k), title: k > 30 ? 'Weekend ride' : '' });
+      odo += k * 1.04; sinceFill += k * 1.04;
+      if (sinceFill > 270 + rnd() * 70) {
+        const full = rnd() > 0.15, l = +(sinceFill / (37 + rnd() * 6) * (full ? 1 : 0.5)).toFixed(1);
+        fills.push({ id: 's-f' + fills.length, at: st + dur * 6e4 + 6e5, odo: Math.round(odo), liters: l, total: Math.round(l * 122), full, station: rnd() < 0.5 ? 'Meghna Petroleum, Mohakhali' : 'Padma Oil, Tejgaon' });
+        if (full) sinceFill = 0; else sinceFill *= 0.5;
+      }
+    }
+  }
+  const e = (dAgo, cat, amount, note) => exp.push({ id: 's-e' + exp.length, at: now - dAgo * day, cat, amount, note, odo: 0 });
+  e(110, 'Service', 1200, 'Regular service, chain adjust'); e(110, 'Engine oil', 1450, 'Engine oil 1 L + filter');
+  e(96, 'Wash', 150, ''); e(80, 'Parking & toll', 60, 'Bridge toll'); e(71, 'Gear & accessories', 850, 'Helmet visor');
+  e(58, 'Tax token & papers', 2500, 'Tax token renewal'); e(44, 'Wash', 150, ''); e(37, 'Parts & repair', 650, 'Brake shoes, rear');
+  e(23, 'Engine oil', 1450, 'Engine oil 1 L'); e(15, 'Parking & toll', 40, ''); e(6, 'Tyres', 3200, 'Rear tyre');
+  e(2, 'Wash', 150, '');
+  SAMPLE = { garage: { ...DEF, ...S.garage, odo: Math.round(odo) }, rides: rides.sort((a, b) => b.start - a.start), fills, exp, sample: true };
+  return SAMPLE;
+}
+function data() {
+  if (hasReal() || S.hideSample) return { garage: S.garage, rides: S.rides, fills: S.fills, exp: S.exp, sample: false };
+  const s = sample(); s.garage = { ...S.garage, odo: s.garage.odo }; return s;
+}
+
+/* ---------- Derived numbers ---------- */
+function derive(d) {
+  const stats = Core.fuelStats(d.fills);
+  const kmpl = stats.avg || d.garage.estKmpl || 40;
+  const odos = [d.garage.odo, ...d.fills.map(x => x.odo), ...d.exp.map(x => x.odo), ...d.rides.map(r => r.odoEnd)].filter(v => v > 0);
+  const odoNow = odos.length ? Math.max(...odos) : 0;
+  const tank = Core.tankEstimate({
+    fills: d.fills, tankL: d.garage.tankL, reserveL: d.garage.reserveL, kmpl, odoNow,
+    rideKmAfter: t => d.rides.filter(r => r.start > t).reduce((s, r) => s + (+r.km || 0), 0),
+  });
+  return { stats, kmpl, measured: !!stats.avg, odoNow, tank };
+}
+
+/* ---------- Storage (Claude account, or this browser) ---------- */
+const LS_KEY = 'ride-log-v1';
+const Store = {
+  mode: 'connecting', root: null, dl: null, q: {}, pm: {},
+  async init() {
+    let db = null, user = null;
+    if (window.claude && typeof window.claude.use === 'function') {
+      try { [db, user, Store.dl] = await Promise.all([claude.use('db'), claude.use('user'), claude.use('downloads')]); } catch (e) { }
+    }
+    let id = null;
+    if (db && user) { try { id = await user.id(); } catch (e) { } }
+    if (db && id) { Store.mode = 'cloud'; Store.root = db.doc('data/users/' + id + '/garage'); Store.listen(); }
+    else { Store.mode = 'local'; Store.loadLocal(); }
+    render();
+  },
+  listen() {
+    const got = new Set();
+    const timer = setTimeout(() => { if (got.size < 4) { S.note = "Your saved rides and costs can't be reached yet. They'll appear when the connection returns."; render(); } }, 10000);
+    const ok = (k, snap) => { if (!snap.metadata.fromCache) { got.add(k); if (got.size === 4) { clearTimeout(timer); S.note = ''; } } schedule(); };
+    const bad = e => { clearTimeout(timer); S.note = "Saved data isn't available right now. Reload the page to try again."; schedule(); };
+    const r = Store.root;
+    r.onSnapshot(s => { S.garage = { ...DEF, ...(s.exists ? s.data() : {}) }; ok('g', s); }, bad);
+    r.collection('rides').onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = (d.data() || {}).rides || {}; }); S.rideMonths = m; S.rides = flatten(m); ok('r', s); }, bad);
+    r.collection('fuel').onSnapshot(s => { S.fills = s.docs.map(d => d.data()); ok('f', s); }, bad);
+    r.collection('expenses').onSnapshot(s => { S.exp = s.docs.map(d => d.data()); ok('e', s); }, bad);
+  },
+  loadLocal() {
+    try { const o = JSON.parse(lsGet(LS_KEY) || '{}'); S.garage = { ...DEF, ...(o.garage || {}) }; S.rideMonths = o.rideMonths || {}; S.fills = o.fills || []; S.exp = o.exp || []; S.rides = flatten(S.rideMonths); } catch (e) { }
+  },
+  persist() {
+    S.rides = flatten(S.rideMonths);
+    if (!lsSet(LS_KEY, JSON.stringify({ garage: S.garage, rideMonths: S.rideMonths, fills: S.fills, exp: S.exp })))
+      toast("This browser won't let the app save. Export a backup from Settings.");
+    render();
+  },
+  queued(key, fn) { const p = (Store.q[key] || Promise.resolve()).catch(() => { }).then(fn); Store.q[key] = p; return p; },
+  fail(e) { const c = e && e.code; toast(c === 'quota_exceeded' ? 'Storage is full. Delete some old entries and try again.' : "Couldn't save that. Check your connection and try again."); throw e; },
+  async saveGarage(patch) {
+    if (Store.mode === 'cloud') { const g = { ...S.garage, ...patch }; return Store.queued('g', () => Store.root.set(g)).catch(Store.fail); }
+    S.garage = { ...S.garage, ...patch }; Store.persist();
+  },
+  async saveItem(coll, obj) {
+    const arr = coll === 'fuel' ? 'fills' : 'exp';
+    if (Store.mode === 'cloud') return Store.queued(coll + obj.id, () => Store.root.collection(coll).doc(obj.id).set(obj)).catch(Store.fail);
+    S[arr] = [...S[arr].filter(x => x.id !== obj.id), obj]; Store.persist();
+  },
+  async delItem(coll, id) {
+    const arr = coll === 'fuel' ? 'fills' : 'exp';
+    if (Store.mode === 'cloud') return Store.queued(coll + id, () => Store.root.collection(coll).doc(id).delete()).catch(Store.fail);
+    S[arr] = S[arr].filter(x => x.id !== id); Store.persist();
+  },
+  async saveRides(list, removeIds = []) {
+    const months = {};
+    for (const r of list) (months[monthKey(r.start)] ||= []).push(r);
+    for (const id of removeIds) { for (const mk in S.rideMonths) if (S.rideMonths[mk][id]) (months[mk] ||= []); }
+    for (const mk of Object.keys(months)) {
+      const run = async () => {
+        const cur = { ...(Store.pm[mk] || S.rideMonths[mk] || {}) };
+        removeIds.forEach(id => delete cur[id]);
+        months[mk].forEach(r => { cur[r.id] = r; });
+        if (Store.mode === 'cloud') {
+          Store.pm[mk] = cur;
+          const ref = Store.root.collection('rides').doc(mk);
+          try { await (Object.keys(cur).length ? ref.set({ rides: cur }) : ref.delete()); }
+          finally { if (Store.pm[mk] === cur) delete Store.pm[mk]; }
+        } else { if (Object.keys(cur).length) S.rideMonths[mk] = cur; else delete S.rideMonths[mk]; }
+      };
+      await Store.queued('r' + mk, run).catch(Store.fail);
+    }
+    if (Store.mode !== 'cloud') Store.persist();
+  },
+  async download(filename, text) {
+    if (Store.dl) {
+      try { await Store.dl.save({ filename, data: text }); toast('Saved ' + filename); }
+      catch (e) { if (e && e.code !== 'declined') toast("Couldn't save the file here."); }
+      return;
+    }
+    try {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/octet-stream' })); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) { toast("Saving files isn't available here."); }
+  },
+};
+
+/* ---------- Render scheduling ---------- */
+let rq = 0;
+function schedule() { if (!rq) rq = requestAnimationFrame(() => { rq = 0; render(); }); }
+
+/* ---------- Small views ---------- */
+function routeSvg(path, w = 52, h = 40) {
+  if (!path || path.length < 2) return `<svg class="route" viewBox="0 0 ${w} ${h}" aria-hidden="true"><circle cx="${w / 2}" cy="${h / 2}" r="2.5"/></svg>`;
+  const lat0 = path[0][0] * Math.PI / 180, k = Math.cos(lat0);
+  const xs = path.map(p => p[1] * k), ys = path.map(p => -p[0]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const span = Math.max(maxX - minX, maxY - minY) || 1e-6, pad = 7, sc = Math.min((w - pad * 2) / span, (h - pad * 2) / span);
+  const ox = (w - (maxX - minX) * sc) / 2, oy = (h - (maxY - minY) * sc) / 2;
+  const pts = xs.map((x, i) => [((x - minX) * sc + ox).toFixed(1), ((ys[i] - minY) * sc + oy).toFixed(1)]);
+  const e = pts[pts.length - 1];
+  return `<svg class="route" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="M${pts.map(p => p.join(' ')).join('L')}"/><circle cx="${e[0]}" cy="${e[1]}" r="2.6"/></svg>`;
+}
+const SRC = { gps: 'GPS', timeline: 'Timeline', manual: 'Manual' };
+function rideItem(r, d) {
+  const min = (r.end - r.start) / 6e4, sp = min > 0 ? r.km / (min / 60) : 0;
+  return `<li><button class="item" data-edit-ride="${esc(r.id)}" ${d.sample ? 'disabled' : ''}>${routeSvg(r.path)}
+    <div class="main"><div class="t1">${esc(r.title || 'Ride')} <span class="chip">${SRC[r.src] || 'Manual'}</span></div>
+    <div class="t2 num">${fDay(r.start)} · ${fTime(r.start)} · ${fDur(min)}${sp ? ' · ' + nf0.format(sp) + ' km/h avg' : ''}</div></div>
+    <div class="val"><b>${kmf(r.km)}</b><span>km</span></div></button></li>`;
+}
+function fillItem(x, dv, d) {
+  const p = dv.stats.per[x.id];
+  let chip = '';
+  if (p) { const ratio = dv.stats.avg ? p.kmpl / dv.stats.avg : 1; chip = `<span class="chip ${ratio >= 0.97 ? 'good' : ratio >= 0.88 ? 'warn' : 'bad'}">${nf1.format(p.kmpl)} km/L</span>`; }
+  return `<li><button class="item" data-edit-fill="${esc(x.id)}" ${d.sample ? 'disabled' : ''}><span class="badge fuel">${ic('fuel')}</span>
+    <div class="main"><div class="t1">${fDate(x.at)} ${chip}</div>
+    <div class="t2 num">${nf1.format(x.liters)} L · ${tk(x.total / x.liters)}/L · ODO ${nf0.format(x.odo)}${x.station ? ' · ' + esc(x.station) : ''}</div></div>
+    <div class="val"><b>${tk(x.total)}</b><span>${x.full ? 'full tank' : 'top-up'}</span></div></button></li>`;
+}
+function expItem(x, d) {
+  return `<li><button class="item" data-edit-exp="${esc(x.id)}" ${d.sample ? 'disabled' : ''}><span class="badge">${ic('wrench')}</span>
+    <div class="main"><div class="t1">${esc(x.note || x.cat)}</div><div class="t2">${esc(x.cat)} · ${fDate(x.at)}${x.odo ? ' · ODO ' + nf0.format(x.odo) : ''}</div></div>
+    <div class="val"><b>${tk(x.amount)}</b></div></button></li>`;
+}
+function banner(d) {
+  if (!d.sample) return '';
+  return `<div class="banner"><p><b>These are sample numbers</b> so you can see how the app works. Add your first refuel, cost or ride and they disappear.</p>
+    <button class="btn small ghost" data-act="hide-sample">Hide</button></div>`;
+}
+const noteHtml = () => {
+  let h = S.note ? `<div class="note">${esc(S.note)}</div>` : '';
+  let p = !T.on && pendingLive();
+  if (p && !(p.km >= 0.05)) { clearLive(); p = null; }
+  if (p) h += `<div class="banner"><p><b>Unfinished ride</b> from ${fDay(p.start)}, ${fTime(p.start)}: ${nf1.format(p.km)} km recorded before the app closed.</p>
+    <div class="stack"><button class="btn small primary" data-act="live-save">Save</button><button class="btn small" data-act="live-resume">Continue</button><button class="btn small ghost" data-act="live-drop">Discard</button></div></div>`;
+  return h;
+};
+function statsHtml(items) {
+  return `<div class="stats">${items.map(([k, v, u, s]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}${u ? `<small>${u}</small>` : ''}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`).join('')}</div>`;
+}
+const monthBounds = (y, m) => [new Date(y, m, 1).getTime(), new Date(y, m + 1, 1).getTime()];
+
+/* ---------- Gauge ---------- */
+function gauge(tank, tankL, reserveL) {
+  const cx = 100, cy = 100, R = 78, A0 = 200, SW = 220;
+  const pt = (t, r = R) => { const a = (A0 - t * SW) * Math.PI / 180; return [(cx + r * Math.cos(a)).toFixed(2), (cy - r * Math.sin(a)).toFixed(2)]; };
+  const arc = (t0, t1, r = R) => { const [x0, y0] = pt(t0, r), [x1, y1] = pt(t1, r); return `M${x0} ${y0}A${r} ${r} 0 ${(t1 - t0) * SW > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+  const res = Math.min(0.5, reserveL / tankL);
+  let s = `<svg viewBox="0 0 200 142" role="img" aria-label="${tank ? `Fuel gauge: about ${nf1.format(tank.fuel)} of ${tankL} litres left` : 'Fuel gauge: not enough refuels yet'}">`;
+  s += `<path d="${arc(0, 1)}" stroke="var(--cluster-line)" stroke-width="10" fill="none" stroke-linecap="round"/>`;
+  s += `<path d="${arc(0, res)}" stroke="var(--gauge-res)" stroke-width="10" fill="none" opacity=".45"/>`;
+  if (tank && tank.pct > 0.005) s += `<path d="${arc(0, tank.pct)}" stroke="${tank.onReserve ? 'var(--gauge-res)' : 'var(--gauge-fuel)'}" stroke-width="10" fill="none" stroke-linecap="round"/>`;
+  for (let i = 0; i <= 8; i++) { const t = i / 8, [x0, y0] = pt(t, R - 12), [x1, y1] = pt(t, R - (i % 4 ? 16 : 20)); s += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="var(--cluster-dim)" stroke-width="${i % 4 ? 1 : 2}"/>`; }
+  [[0, 'E'], [1, 'F']].forEach(([t, l]) => { const [x, y] = pt(t, R - 32); s += `<text class="t" x="${x}" y="${(+y + 4).toFixed(1)}" text-anchor="middle">${l}</text>`; });
+  if (tank) { const [nx, ny] = pt(tank.pct, R - 6); s += `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--needle)" stroke-width="3" stroke-linecap="round"/>`; }
+  s += `<circle cx="${cx}" cy="${cy}" r="6" fill="var(--cluster-2)" stroke="var(--needle)" stroke-width="2"/>`;
+  s += `<text class="v" x="${cx}" y="134" text-anchor="middle">${tank ? nf1.format(tank.fuel) + ' L' : '— L'}</text></svg>`;
+  return s;
+}
+function odoDigits(odo) {
+  const s = String(Math.max(0, Math.floor(odo))).padStart(6, '0');
+  return `<span class="digits num" aria-label="${nf0.format(odo)} kilometres">${[...s].map(c => `<span>${c}</span>`).join('')}</span>`;
+}
+
+/* ---------- Views ---------- */
+function vHome(d, dv) {
+  const t = dv.tank, now = new Date();
+  const [a, b] = monthBounds(now.getFullYear(), now.getMonth());
+  const m = Core.summarize(d, a, b, dv.stats);
+  const kmplLabel = dv.measured ? `average of ${Object.keys(dv.stats.per).length} full tanks` : 'your estimate, until 2 full-tank fills';
+  let rangeSub = '';
+  if (t) rangeSub = t.onReserve ? `<span class="sub bad">On reserve. Refuel soon.</span>` : `<span class="sub ${t.toReserve < 60 ? 'warn' : ''}">${nf0.format(t.toReserve)} km to reserve</span>`;
+  const recent = [
+    ...d.rides.slice(0, 8).map(r => ({ at: r.start, h: rideItem(r, d) })),
+    ...d.fills.map(x => ({ at: x.at, h: fillItem(x, dv, d) })),
+    ...d.exp.map(x => ({ at: x.at, h: expItem(x, d) })),
+  ].sort((p, q) => q.at - p.at).slice(0, 6);
+  return `${banner(d)}${noteHtml()}
+  <section class="cluster" aria-label="Bike status">
+    <div class="gauge">${gauge(t, d.garage.tankL, d.garage.reserveL)}</div>
+    <div class="readouts">
+      <div class="ro"><span class="lbl">RANGE</span><span class="big num">${t ? nf0.format(t.range) : '—'}<small>km</small></span>${rangeSub}</div>
+      <div class="ro"><span class="lbl">MILEAGE</span><span class="mid num">${nf1.format(dv.kmpl)}<small>km/L</small></span><span class="sub">${kmplLabel}</span></div>
+    </div>
+    ${t ? '' : `<p class="hint">Log a full-tank refuel to see fuel left and range.</p>`}
+    <button class="odo" data-act="settings" aria-label="Update odometer"><span class="lbl">ODO</span>${odoDigits(dv.odoNow)}<span class="km">km</span><span class="edit">Update</span></button>
+  </section>
+  <div class="actions">
+    <button class="btn primary" data-act="start-ride">${ic('play')}Start ride</button>
+    <button class="btn" data-act="add-fuel">${ic('fuel')}Refuel</button>
+    <button class="btn" data-act="add-exp">${ic('plus')}Add cost</button>
+  </div>
+  <section><h2 class="sec">${MONTH[now.getMonth()]} so far <a class="r" href="#reports">Full report</a></h2>
+    ${statsHtml([
+      ['Ridden', kmf(m.rideKm), 'km', `${m.rides} rides`],
+      ['Fuel', tk(m.fuelCost), '', `${nf1.format(m.liters)} L`],
+      ['Other costs', tk(m.otherCost), '', `${m.expCount} items`],
+      ['Total', tk(m.total), '', m.costPerKm ? `${tk(m.costPerKm)}/km` : '—'],
+    ])}</section>
+  <section><h2 class="sec">Recent</h2>
+    <div class="card group">${recent.length ? `<ul class="list">${recent.map(x => x.h).join('')}</ul>` : `<div class="empty"><b>Nothing logged yet</b>Start a ride, add a refuel or a cost.</div>`}</div></section>`;
+}
+
+function vRides(d) {
+  const groups = {};
+  d.rides.forEach(r => (groups[monthKey(r.start)] ||= []).push(r));
+  const keys = Object.keys(groups).sort().reverse();
+  const shown = keys.slice(0, S.rideMonthsShown);
+  const total = d.rides.reduce((s, r) => s + r.km, 0);
+  return `${banner(d)}${noteHtml()}
+  <div class="row-btns">
+    <button class="btn primary" data-act="start-ride">${ic('play')}Start ride</button>
+    <button class="btn" data-act="add-ride">${ic('pen')}Log a ride</button>
+    <button class="btn" data-act="import">${ic('up')}Import Google Timeline</button>
+  </div>
+  ${d.rides.length ? statsHtml([
+    ['Rides logged', nf0.format(d.rides.length), '', ''],
+    ['Distance', kmf(total), 'km', ''],
+    ['Longest', kmf(Math.max(...d.rides.map(r => r.km))), 'km', ''],
+    ['Since', fDate(d.rides[d.rides.length - 1].start), '', ''],
+  ]) : ''}
+  ${shown.map(k => {
+    const rs = groups[k], [y, mo] = k.split('-');
+    return `<section class="card group"><div class="month-h"><b>${MONTH[+mo - 1]} ${y}</b><span class="num">${rs.length} rides · ${kmf(rs.reduce((s, r) => s + r.km, 0))} km</span></div>
+      <ul class="list">${rs.map(r => rideItem(r, d)).join('')}</ul></section>`;
+  }).join('') || `<div class="card empty"><b>No rides yet</b>Start a ride with GPS, log one by hand, or import your history from Google Timeline.</div>`}
+  ${keys.length > shown.length ? `<div class="more"><button class="btn small" data-act="more-rides">Show older months</button></div>` : ''}`;
+}
+
+const chartW = () => { const v = document.getElementById('view'); return Math.round(Math.max(300, Math.min(720, (v ? v.clientWidth : 400) - 34))); };
+function lineChart(series, avg) {
+  const W = chartW(), H = 200, L = 40, R = 46, T = 14, B = 26;
+  const vals = series.map(p => p.kmpl), lo = Math.floor(Math.min(...vals, avg) - 2), hi = Math.ceil(Math.max(...vals, avg) + 2);
+  const x = i => L + (series.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (series.length - 1));
+  const y = v => T + (hi - v) * (H - T - B) / (hi - lo || 1);
+  const step = Math.max(1, Math.round((hi - lo) / 4));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Mileage per full tank, km per litre">`;
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  const pts = series.map((p, i) => [x(i), y(p.kmpl)]);
+  s += `<path class="area" d="M${pts[0][0]} ${H - B}L${pts.map(p => p.join(' ')).join('L')}L${pts[pts.length - 1][0]} ${H - B}Z"/>`;
+  s += `<line class="avg" x1="${L}" x2="${W - R}" y1="${y(avg)}" y2="${y(avg)}"/><text class="ax" x="${W - R + 6}" y="${y(avg) + 4}">avg</text>`;
+  s += `<path class="ln" d="M${pts.map(p => p.join(' ')).join('L')}"/>`;
+  pts.forEach((p, i) => { s += `<circle class="dot ${i === pts.length - 1 ? 'end' : ''}" cx="${p[0]}" cy="${p[1]}" r="${i === pts.length - 1 ? 5 : 3.5}"/>`; });
+  const e = pts[pts.length - 1];
+  s += `<text class="lbl" x="${Math.min(e[0], W - R - 4)}" y="${e[1] - 11}" text-anchor="middle">${nf1.format(vals[vals.length - 1])}</text>`;
+  [0, series.length - 1].filter((v, i, a) => a.indexOf(v) === i).forEach(i => { s += `<text class="ax" x="${x(i)}" y="${H - 6}" text-anchor="${series.length === 1 ? 'middle' : i ? 'end' : 'start'}">${fDate(series[i].at)}</text>`; });
+  return s + '</svg>';
+}
+
+function vFuel(d, dv) {
+  const st = dv.stats, fills = [...d.fills].sort((a, b) => b.at - a.at);
+  return `${banner(d)}${noteHtml()}
+  <button class="btn primary block" data-act="add-fuel">${ic('fuel')}Add refuel</button>
+  ${statsHtml([
+    ['Average mileage', st.avg ? nf1.format(st.avg) : '—', 'km/L', st.avg ? `${Object.keys(st.per).length} full tanks` : 'needs 2 full tanks'],
+    ['Last full tank', st.last ? nf1.format(st.last) : '—', 'km/L', ''],
+    ['Average price', st.pricePerL ? tk(st.pricePerL) : '—', '/L', ''],
+    ['Fuel bought', nf0.format(st.liters), 'L', tk(st.cost)],
+  ])}
+  ${dv.tank ? `<div class="note">Full tank (${nf1.format(d.garage.tankL)} L) takes you about <b>${nf0.format(dv.tank.fullRange)} km</b>. Right now: about ${nf1.format(dv.tank.fuel)} L left, ${nf0.format(dv.tank.range)} km range, ${nf0.format(dv.tank.kmSince)} km ridden since the last refuel.</div>` : ''}
+  ${st.series.length ? `<section class="card"><h2 class="sec" style="padding:14px 16px 0">Mileage per full tank</h2><div class="chart">${lineChart(st.series.slice(-24), st.avg)}</div></section>` : ''}
+  <section><h2 class="sec">Refuel history</h2>
+  <div class="card group">${fills.length ? `<ul class="list">${fills.map(x => fillItem(x, dv, d)).join('')}</ul>` : `<div class="empty"><b>No refuels yet</b>Add each fill with the odometer reading. Fill to full when you can: mileage is measured from one full tank to the next.</div>`}</div></section>`;
+}
+
+function catBars(cats, fuel) {
+  const rows = Object.entries(cats).filter(([, v]) => v > 0);
+  if (fuel) rows.push(['Fuel', fuel]);
+  rows.sort((a, b) => b[1] - a[1]);
+  const tot = rows.reduce((s, r) => s + r[1], 0), max = rows.length ? rows[0][1] : 1;
+  if (!rows.length) return `<div class="empty"><b>No costs in this period</b></div>`;
+  return `<div class="bars">${rows.map(([n, v]) => `<div class="bar-row"><span class="n">${esc(n)}</span><span class="a num">${tk(v)}<span>${Math.round(v / tot * 100)}%</span></span>
+    <div class="track"><i class="${n === 'Fuel' ? 'fuel' : ''}" style="width:${(v / max * 100).toFixed(1)}%"></i></div></div>`).join('')}</div>`;
+}
+
+function vCosts(d, dv) {
+  const all = Core.summarize(d, 0, Infinity, dv.stats);
+  const firstAt = Math.min(...[...d.fills.map(x => x.at), ...d.exp.map(x => x.at)].filter(Boolean), Date.now());
+  const f = S.costFilter;
+  const list = [...d.exp].filter(x => f === 'All' || x.cat === f).sort((a, b) => b.at - a.at);
+  const usedCats = ['All', ...CATS.filter(c => d.exp.some(x => x.cat === c))];
+  return `${banner(d)}${noteHtml()}
+  <section class="card total"><div class="k">Total spent on this bike since ${fDate(firstAt)}</div>
+    <div class="v">${tk(all.total)}</div>
+    <div class="s num">Fuel ${tk(all.fuelCost)} · Other ${tk(all.otherCost)}${all.costPerKm ? ` · ${tk(all.costPerKm)} per km` : ''}</div></section>
+  <button class="btn primary block" data-act="add-exp">${ic('plus')}Add a bike cost</button>
+  <section><h2 class="sec">Where the money goes</h2><div class="card">${catBars(all.cats, all.fuelCost)}</div></section>
+  <section><h2 class="sec">Costs <span class="r">Fuel is listed under Refuels</span></h2>
+    <div class="chips" role="group" aria-label="Filter by category">${usedCats.map(c => `<button aria-pressed="${c === f}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div class="card group" style="margin-top:10px">${list.length ? `<ul class="list">${list.map(x => expItem(x, d)).join('')}</ul>` : `<div class="empty"><b>No costs logged</b>Service, oil, parts, tyres, tax token, parking: add anything you spend on the bike.</div>`}</div></section>`;
+}
+
+function barChart(labels, stacks, fmt, title) {
+  const W = chartW(), H = 210, L = 52, R = 8, T = 12, B = 26;
+  const totals = labels.map((_, i) => stacks.reduce((s, st) => s + (st.vals[i] || 0), 0));
+  const sc = Core.niceScale(Math.max(...totals));
+  const bw = (W - L - R) / labels.length, y = v => T + (sc.max - v) * (H - T - B) / sc.max;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">`;
+  for (let v = 0; v <= sc.max + 1e-9; v += sc.step) s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  labels.forEach((l, i) => {
+    let base = 0; const x = L + i * bw + bw * 0.18, w = bw * 0.64;
+    stacks.forEach(st => { const v = st.vals[i] || 0; if (v > 0) { s += `<rect class="${st.cls}" x="${x.toFixed(1)}" y="${y(base + v).toFixed(1)}" width="${w.toFixed(1)}" height="${(y(base) - y(base + v)).toFixed(1)}" rx="2"/>`; base += v; } });
+    s += `<text class="ax" x="${(x + w / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${l}</text>`;
+  });
+  return s + '</svg>';
+}
+
+function vReports(d, dv) {
+  const R = S.rep, now = new Date();
+  const isM = R.kind === 'month';
+  const [a, b] = isM ? monthBounds(R.y, R.m) : [new Date(R.y, 0, 1).getTime(), new Date(R.y + 1, 0, 1).getTime()];
+  const sm = Core.summarize(d, a, b, dv.stats);
+  const atEnd = isM ? (R.y > now.getFullYear() || (R.y === now.getFullYear() && R.m >= now.getMonth())) : R.y >= now.getFullYear();
+  const head = `<div class="period"><div class="seg" role="group" aria-label="Report type">
+      <button aria-pressed="${isM}" data-rep="month">Monthly</button><button aria-pressed="${!isM}" data-rep="year">Yearly</button></div></div>
+    <div class="period"><button class="icon-btn" data-rep-step="-1" aria-label="Previous">${ic('left')}</button>
+      <div class="lab">${isM ? MONTH[R.m] + ' ' + R.y : R.y}</div>
+      <button class="icon-btn" data-rep-step="1" aria-label="Next" ${atEnd ? 'disabled' : ''}>${ic('right')}</button></div>`;
+  const kpis = statsHtml([
+    ['Distance', kmf(sm.basisKm), 'km', sm.basis === 'odometer' ? 'by odometer' : `${sm.rides} rides`],
+    ['Fuel', tk(sm.fuelCost), '', `${nf1.format(sm.liters)} L · ${sm.fillCount} fills`],
+    ['Other costs', tk(sm.otherCost), '', `${sm.expCount} items`],
+    ['Total cost', tk(sm.total), '', sm.costPerKm ? `${tk(sm.costPerKm)} per km` : ''],
+  ]);
+  const extra = statsHtml([
+    ['Mileage', sm.kmpl ? nf1.format(sm.kmpl) : '—', 'km/L', sm.kmpl ? '' : 'no full-tank pair'],
+    ['Riding time', nf0.format(sm.rideMin / 60), 'h', ''],
+    ['Rides', nf0.format(sm.rides), '', ''],
+    ['Cost per ride', sm.rides ? tk(sm.total / sm.rides) : '—', '', ''],
+  ]);
+  let body = '';
+  if (isM) {
+    body = `<section><h2 class="sec">Cost breakdown</h2><div class="card">${catBars(sm.cats, sm.fuelCost)}</div></section>`;
+  } else {
+    const ms = MON.map((_, i) => Core.summarize(d, ...monthBounds(R.y, i), dv.stats));
+    const short = n => n >= 1000 ? (n / 1000).toFixed(n % 1000 ? 1 : 0).replace('.0', '') + 'k' : nf0.format(n);
+    body = `<section class="card"><h2 class="sec" style="padding:14px 16px 0">Spending by month</h2>
+      <div class="chart">${barChart(MON.map(m => m[0]), [{ vals: ms.map(m => m.fuelCost), cls: 'b-fuel' }, { vals: ms.map(m => m.otherCost), cls: 'b-other' }], v => '৳' + short(v), 'Spending by month, fuel and other costs')}</div>
+      <div class="legend"><span><i style="background:var(--fuel)"></i>Fuel</span><span><i style="background:var(--ink);opacity:.78"></i>Other costs</span></div></section>
+    <section class="card"><h2 class="sec" style="padding:14px 16px 0">Distance by month</h2>
+      <div class="chart">${barChart(MON.map(m => m[0]), [{ vals: ms.map(m => m.basisKm), cls: 'b-km' }], v => short(v), 'Kilometres ridden by month')}</div></section>
+    <section><h2 class="sec">Month by month</h2><div class="card tbl-wrap"><table>
+      <thead><tr><th>Month</th><th>km</th><th>Fuel L</th><th>km/L</th><th>Fuel</th><th>Other</th><th>Total</th></tr></thead>
+      <tbody>${ms.map((m, i) => `<tr><td>${MON[i]}</td><td>${m.basisKm ? kmf(m.basisKm) : '–'}</td><td>${m.liters ? nf1.format(m.liters) : '–'}</td><td>${m.kmpl ? nf1.format(m.kmpl) : '–'}</td><td>${m.fuelCost ? tk(m.fuelCost) : '–'}</td><td>${m.otherCost ? tk(m.otherCost) : '–'}</td><td>${m.total ? tk(m.total) : '–'}</td></tr>`).join('')}
+      <tr class="tot"><td>${R.y}</td><td>${kmf(sm.basisKm)}</td><td>${nf1.format(sm.liters)}</td><td>${sm.kmpl ? nf1.format(sm.kmpl) : '–'}</td><td>${tk(sm.fuelCost)}</td><td>${tk(sm.otherCost)}</td><td>${tk(sm.total)}</td></tr></tbody></table></div></section>
+    <section><h2 class="sec">Cost breakdown</h2><div class="card">${catBars(sm.cats, sm.fuelCost)}</div></section>`;
+  }
+  return `${banner(d)}${noteHtml()}${head}${kpis}${extra}${body}
+    <p class="foot">Distance uses whichever is larger: rides you logged, or the change in odometer readings within the period.</p>`;
+}
+
+/* ---------- Main render ---------- */
+const VIEWS = { home: ['Home', 'home'], rides: ['Rides', 'ride'], fuel: ['Refuels', 'fuel'], costs: ['Costs', 'cost'], reports: ['Reports', 'chart'] };
+function render() {
+  const d = data(), dv = derive(d);
+  $('#bike-name').textContent = d.garage.bikeName || 'My bike';
+  const fn = { home: vHome, rides: vRides, fuel: vFuel, costs: vCosts, reports: vReports }[S.view];
+  $('#view').innerHTML = fn(d, dv);
+  document.querySelectorAll('.nav a').forEach(a => a.setAttribute('aria-current', a.dataset.v === S.view ? 'page' : 'false'));
+  document.title = 'Off Road';
+}
+function route() {
+  const h = location.hash.slice(1);
+  const v = VIEWS[h] ? h : 'home';
+  if (v !== S.view) { S.view = v; render(); window.scrollTo(0, 0); }
+}
+
+/* ---------- Toast ---------- */
+let toastT;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200);
+}
+
+/* ---------- Sheets ---------- */
+let sheetCleanup = null;
+function openSheet(title, html, mount) {
+  $('#sheet-title').textContent = title;
+  $('#sheet-body').innerHTML = html;
+  $('#scrim').hidden = false;
+  document.body.style.overflow = 'hidden';
+  sheetCleanup = mount ? mount($('#sheet-body')) : null;
+  const first = $('#sheet-body').querySelector('input,select,button'); if (first) first.focus({ preventScroll: true });
+}
+function closeSheet() { $('#scrim').hidden = true; document.body.style.overflow = ''; if (typeof sheetCleanup === 'function') sheetCleanup(); sheetCleanup = null; }
+const field = (id, label, input, hint = '') => `<div class="field"><label for="${id}">${label}</label>${input}${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+const inp = (id, attrs, unit) => unit ? `<div class="unit"><input id="${id}" ${attrs}><em>${unit}</em></div>` : `<input id="${id}" ${attrs}>`;
+function delButton(onDel) {
+  return { html: `<button type="button" class="btn danger" id="f-del">Delete</button>`, wire(root) {
+    const b = root.querySelector('#f-del'); if (!b) return;
+    b.addEventListener('click', async () => {
+      if (b.dataset.armed) { b.disabled = true; try { await onDel(); closeSheet(); toast('Deleted'); } catch (e) { b.disabled = false; } }
+      else { b.dataset.armed = '1'; b.textContent = 'Tap again to delete'; }
+    });
+  } };
+}
+
+function sheetFuel(existing) {
+  const d = data(), dv = derive(data());
+  const x = existing || { at: Date.now(), odo: '', liters: '', total: '', full: true, station: '' };
+  const lastPrice = (() => { const f = [...d.fills].sort((a, b) => b.at - a.at)[0]; return f ? (f.total / f.liters).toFixed(2) : ''; })();
+  const price = existing ? (x.total / x.liters).toFixed(2) : lastPrice;
+  const del = existing ? delButton(() => Store.delItem('fuel', x.id)) : null;
+  openSheet(existing ? 'Edit refuel' : 'Add refuel', `<form class="form" id="f">
+    <div class="fgrid">
+      ${field('f-at', 'Date and time', inp('f-at', `type="datetime-local" required value="${toInput(x.at)}"`))}
+      ${field('f-odo', 'Odometer', inp('f-odo', `inputmode="numeric" required placeholder="${dv.odoNow ? nf0.format(dv.odoNow) : '12500'}" value="${x.odo || ''}"`, 'km'))}
+      ${field('f-l', 'Fuel added', inp('f-l', `inputmode="decimal" required placeholder="8.5" value="${x.liters || ''}"`, 'L'))}
+      ${field('f-p', 'Price per litre', inp('f-p', `inputmode="decimal" placeholder="122" value="${price}"`, '৳'))}
+    </div>
+    ${field('f-t', 'Total paid', inp('f-t', `inputmode="decimal" required placeholder="0" value="${x.total ? Math.round(x.total) : ''}"`, '৳'), 'Fills in from litres × price. Change it if the pump total differs.')}
+    <label class="switch"><input type="checkbox" id="f-full" ${x.full ? 'checked' : ''}><div><b>Filled to full</b><small>Mileage is measured between full tanks. Turn off for a top-up.</small></div></label>
+    ${field('f-st', 'Pump (optional)', inp('f-st', `placeholder="e.g. Padma Oil, Tejgaon" value="${esc(x.station || '')}"`))}
+    <div class="calc" id="f-calc"></div>
+    <div class="row-btns">${del ? del.html : ''}<button class="btn primary" type="submit">${existing ? 'Save changes' : 'Save refuel'}</button></div></form>`,
+  root => {
+    const L = root.querySelector('#f-l'), P = root.querySelector('#f-p'), T = root.querySelector('#f-t'), O = root.querySelector('#f-odo');
+    let totalTouched = !!existing;
+    const calc = () => {
+      const l = num(L.value), p = num(P.value);
+      if (!totalTouched && l && p) T.value = Math.round(l * p);
+      const odo = num(O.value), prev = [...d.fills].filter(f => f.id !== x.id && f.odo < odo).sort((a, b) => b.odo - a.odo)[0];
+      root.querySelector('#f-calc').innerHTML = prev && odo ? `<b>${nf0.format(odo - prev.odo)} km</b> since the last refuel on ${fDate(prev.at)}.` : 'Enter the odometer reading shown on the bike when you fill up.';
+    };
+    L.oninput = P.oninput = O.oninput = calc;
+    T.oninput = () => { totalTouched = true; const l = num(L.value), t = num(T.value); if (l && t) P.value = (t / l).toFixed(2); };
+    calc(); if (del) del.wire(root);
+    root.querySelector('#f').onsubmit = async e => {
+      e.preventDefault();
+      const obj = { id: x.id || uid('f'), at: fromInput(root.querySelector('#f-at').value), odo: num(O.value), liters: num(L.value), total: num(T.value), full: root.querySelector('#f-full').checked, station: root.querySelector('#f-st').value.trim() };
+      if (!obj.odo || !obj.liters || !obj.total) return toast('Add the odometer, litres and total paid.');
+      try { await Store.saveItem('fuel', obj); closeSheet(); toast(existing ? 'Refuel updated' : 'Refuel saved'); } catch (e) { }
+    };
+  });
+}
+
+function sheetExp(existing) {
+  const x = existing || { at: Date.now(), cat: 'Service', amount: '', note: '', odo: '' };
+  let cat = x.cat;
+  const del = existing ? delButton(() => Store.delItem('expenses', x.id)) : null;
+  openSheet(existing ? 'Edit cost' : 'Add a bike cost', `<form class="form" id="f">
+    <div class="field"><span class="flabel" id="cat-l">Category</span><div class="catpick" role="group" aria-labelledby="cat-l">${CATS.map(c => `<button type="button" data-cat="${esc(c)}" aria-pressed="${c === cat}">${esc(c)}</button>`).join('')}</div></div>
+    <div class="fgrid">
+      ${field('e-amt', 'Amount', inp('e-amt', `inputmode="decimal" required placeholder="0" value="${x.amount || ''}"`, '৳'))}
+      ${field('e-at', 'Date', inp('e-at', `type="date" required value="${toInput(x.at).slice(0, 10)}"`))}
+    </div>
+    ${field('e-note', 'What was it?', inp('e-note', `placeholder="e.g. Chain sprocket kit" value="${esc(x.note || '')}"`))}
+    ${field('e-odo', 'Odometer (optional)', inp('e-odo', `inputmode="numeric" placeholder="Helps with service reminders" value="${x.odo || ''}"`, 'km'))}
+    <div class="row-btns">${del ? del.html : ''}<button class="btn primary" type="submit">${existing ? 'Save changes' : 'Save cost'}</button></div></form>`,
+  root => {
+    root.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { cat = b.dataset.cat; root.querySelectorAll('[data-cat]').forEach(o => o.setAttribute('aria-pressed', o === b)); });
+    if (del) del.wire(root);
+    root.querySelector('#f').onsubmit = async e => {
+      e.preventDefault();
+      const day = root.querySelector('#e-at').value, keep = new Date(x.at);
+      const at = day ? new Date(day + 'T' + String(keep.getHours()).padStart(2, '0') + ':' + String(keep.getMinutes()).padStart(2, '0')).getTime() : Date.now();
+      const obj = { id: x.id || uid('e'), at, cat, amount: num(root.querySelector('#e-amt').value), note: root.querySelector('#e-note').value.trim(), odo: num(root.querySelector('#e-odo').value) };
+      if (!obj.amount) return toast('Add the amount you paid.');
+      try { await Store.saveItem('expenses', obj); closeSheet(); toast(existing ? 'Cost updated' : 'Cost saved'); } catch (e) { }
+    };
+  });
+}
+
+function sheetRide(existing) {
+  const x = existing || { start: Date.now() - 30 * 6e4, end: Date.now(), km: '', title: '', src: 'manual' };
+  const del = existing ? delButton(() => Store.saveRides([], [x.id])) : null;
+  openSheet(existing ? 'Edit ride' : 'Log a ride', `<form class="form" id="f">
+    ${field('r-title', 'Name (optional)', inp('r-title', `placeholder="e.g. Office, or Trip to Gazipur" value="${esc(x.title || '')}"`))}
+    <div class="fgrid">
+      ${field('r-at', 'Started', inp('r-at', `type="datetime-local" required value="${toInput(x.start)}"`))}
+      ${field('r-dur', 'Duration', inp('r-dur', `inputmode="numeric" value="${Math.round((x.end - x.start) / 6e4)}"`, 'min'))}
+    </div>
+    ${field('r-km', 'Distance', inp('r-km', `inputmode="decimal" placeholder="0.0" value="${x.km || ''}"`, 'km'), existing && x.src !== 'manual' ? `Recorded by ${SRC[x.src]}.` : 'Or fill in the odometer at the start and end below.')}
+    ${existing && x.src !== 'manual' ? '' : `<div class="fgrid">
+      ${field('r-o1', 'Odometer at start', inp('r-o1', `inputmode="numeric" value="${x.odoStart || ''}"`, 'km'))}
+      ${field('r-o2', 'Odometer at end', inp('r-o2', `inputmode="numeric" value="${x.odoEnd || ''}"`, 'km'))}</div>`}
+    <div class="row-btns">${del ? del.html : ''}<button class="btn primary" type="submit">${existing ? 'Save changes' : 'Save ride'}</button></div></form>`,
+  root => {
+    const o1 = root.querySelector('#r-o1'), o2 = root.querySelector('#r-o2'), K = root.querySelector('#r-km');
+    if (o1) o1.oninput = o2.oninput = () => { const a = num(o1.value), b = num(o2.value); if (a && b > a) K.value = (b - a).toFixed(1); };
+    if (del) del.wire(root);
+    root.querySelector('#f').onsubmit = async e => {
+      e.preventDefault();
+      const start = fromInput(root.querySelector('#r-at').value), dur = Math.max(1, num(root.querySelector('#r-dur').value));
+      const obj = { ...x, id: x.id || uid('m'), start, end: start + dur * 6e4, km: num(K.value), title: root.querySelector('#r-title').value.trim() };
+      if (o1) { obj.odoStart = num(o1.value) || 0; obj.odoEnd = num(o2.value) || 0; }
+      if (!obj.km) return toast('Add the distance, or the odometer at start and end.');
+      const moved = existing && monthKey(existing.start) !== monthKey(obj.start);
+      try { if (moved) await Store.saveRides([], [x.id]); await Store.saveRides([obj]); closeSheet(); toast(existing ? 'Ride updated' : 'Ride saved'); } catch (e) { }
+    };
+  });
+}
+
+function sheetSettings() {
+  const g = S.garage, dv = derive(data());
+  openSheet('Bike & settings', `<form class="form" id="f">
+    ${field('g-name', 'Bike name', inp('g-name', `value="${esc(g.bikeName)}" placeholder="e.g. FZS V3, red"`))}
+    <div class="fgrid">
+      ${field('g-tank', 'Tank capacity', inp('g-tank', `inputmode="decimal" value="${g.tankL}"`, 'L'))}
+      ${field('g-res', 'Reserve', inp('g-res', `inputmode="decimal" value="${g.reserveL}"`, 'L'))}
+    </div>
+    ${field('g-kmpl', 'Expected mileage', inp('g-kmpl', `inputmode="decimal" value="${g.estKmpl}"`, 'km/L'), 'Used for range until you have two full-tank refuels. After that the app uses your real average.')}
+    ${field('g-odo', 'Odometer now', inp('g-odo', `inputmode="numeric" placeholder="${dv.odoNow ? nf0.format(dv.odoNow) : ''}" value=""`, 'km'), `Last known: ${dv.odoNow ? nf0.format(dv.odoNow) + ' km' : 'none yet'}. Update it whenever you like; range uses the latest reading.`)}
+    <button class="btn primary" type="submit">Save</button>
+    <hr class="divider">
+    ${S.installEvt ? `<button type="button" class="btn" data-act="install">${ic('down')}Install Off Road on this phone</button>` : ''}
+    <div class="note">${Store.mode === 'cloud' ? 'Your rides, refuels and costs are saved to your Claude account and only you can see them. Export a backup now and then.' : Store.mode === 'local' ? 'Your data is saved in this browser only. Export a backup now and then so you don’t lose it.' : 'Connecting to storage…'}</div>
+    <div class="row-btns">
+      <button type="button" class="btn" data-act="export-json">${ic('down')}Backup (.json)</button>
+      <button type="button" class="btn" data-act="export-csv">${ic('down')}Costs (.csv)</button>
+    </div>
+    ${field('g-restore', 'Restore from a backup', `<input id="g-restore" type="file" accept=".json,application/json">`)}
+    ${S.hideSample && !hasReal() ? `<button type="button" class="btn ghost" data-act="show-sample">Show sample data again</button>` : ''}
+  </form>`, root => {
+    root.querySelector('#f').onsubmit = async e => {
+      e.preventDefault();
+      const patch = { bikeName: root.querySelector('#g-name').value.trim() || 'My bike', tankL: num(root.querySelector('#g-tank').value) || 12, reserveL: num(root.querySelector('#g-res').value), estKmpl: num(root.querySelector('#g-kmpl').value) || 40 };
+      const o = num(root.querySelector('#g-odo').value); if (o) { patch.odo = o; patch.odoAt = Date.now(); }
+      try { await Store.saveGarage(patch); closeSheet(); toast('Saved'); } catch (e) { }
+    };
+    root.querySelector('#g-restore').onchange = async ev => {
+      const f = ev.target.files[0]; if (!f) return;
+      try {
+        const o = JSON.parse(await f.text());
+        if (!o || o.app !== 'ride-log') throw new Error('bad');
+        closeSheet(); toast('Restoring backup…');
+        if (o.garage) await Store.saveGarage(o.garage);
+        if (o.rides && o.rides.length) await Store.saveRides(o.rides);
+        for (const x of o.fills || []) await Store.saveItem('fuel', x);
+        for (const x of o.exp || []) await Store.saveItem('expenses', x);
+        toast('Backup restored');
+      } catch (e) { toast("That file isn't a Ride Log backup."); }
+    };
+  });
+}
+
+/* ---------- Google Timeline import ---------- */
+function sheetImport() {
+  openSheet('Import Google Timeline', `<div class="form">
+    <ol class="steps">
+      <li>On your phone, open <b>Google Maps</b> → your profile picture → <b>Settings</b> → <b>Personal content</b> → <b>Export Timeline data</b>.</li>
+      <li>Save the file (usually <b>Timeline.json</b>) to your phone or computer.</li>
+      <li>Choose it below. You'll pick which trips count as bike rides before anything is saved.</li>
+    </ol>
+    ${field('t-file', 'Timeline file', `<input id="t-file" type="file" accept=".json,application/json">`, 'Google Takeout files work too: unzip first and choose one month’s JSON file. The file stays on your device; only the rides you import are saved.')}
+    <div id="t-out"></div></div>`, root => {
+    root.querySelector('#t-file').onchange = async ev => {
+      const f = ev.target.files[0]; if (!f) return;
+      const out = root.querySelector('#t-out');
+      out.innerHTML = `<div class="calc">Reading ${esc(f.name)}…</div>`;
+      let res;
+      try { res = Core.parseTimeline(JSON.parse(await f.text())); }
+      catch (e) { out.innerHTML = `<div class="calc">${esc(e instanceof SyntaxError ? "That file isn't valid JSON. Choose the Timeline.json file you exported." : e.message)}</div>`; return; }
+      if (!res.trips.length) { out.innerHTML = `<div class="calc">No trips found in this file.</div>`; return; }
+      const types = Object.entries(res.types).sort((a, b) => b[1] - a[1]);
+      out.innerHTML = `<div class="form">
+        <div class="calc">Found <b>${nf0.format(res.trips.length)} trips</b> from ${fDate(res.from)} to ${fDate(res.to)}.</div>
+        <div class="field"><span class="flabel">Which trips were on your bike?</span>
+          <div class="typelist">${types.map(([t, n]) => `<label><input type="checkbox" value="${esc(t)}" ${DEFAULT_TYPES.includes(t) ? 'checked' : ''}><span>${esc(TYPE_NAMES[t] || t.toLowerCase().replace(/_/g, ' '))}</span><em>${nf0.format(n)}</em></label>`).join('')}</div>
+          <span class="hint">Google often records motorcycle trips as "Driving". Untick anything that wasn't the bike.</span></div>
+        <div class="fgrid">
+          ${field('t-from', 'From date', inp('t-from', `type="date" value="${toInput(res.from).slice(0, 10)}"`))}
+          ${field('t-min', 'Skip trips shorter than', inp('t-min', `inputmode="decimal" value="1"`, 'km'))}
+        </div>
+        <div class="calc" id="t-count"></div>
+        <button class="btn primary" id="t-go">Import rides</button></div>`;
+      const pick = () => {
+        const ty = new Set([...out.querySelectorAll('.typelist input:checked')].map(i => i.value));
+        const from = new Date(out.querySelector('#t-from').value + 'T00:00').getTime() || 0, min = num(out.querySelector('#t-min').value);
+        const sel = res.trips.filter(t => ty.has(t.type) && t.start >= from && t.km >= min);
+        const have = new Set(S.rides.map(r => r.id));
+        const fresh = sel.filter(t => !have.has(t.id));
+        return { fresh, dup: sel.length - fresh.length };
+      };
+      const upd = () => { const p = pick(); out.querySelector('#t-count').innerHTML = `Will import <b>${nf0.format(p.fresh.length)} rides</b> · ${kmf(p.fresh.reduce((s, t) => s + t.km, 0))} km${p.dup ? ` (${p.dup} already in your log are skipped)` : ''}.`; out.querySelector('#t-go').disabled = !p.fresh.length; };
+      out.addEventListener('input', upd); out.addEventListener('change', upd); upd();
+      out.querySelector('#t-go').onclick = async () => {
+        const p = pick(), btn = out.querySelector('#t-go'); btn.disabled = true; btn.textContent = 'Importing…';
+        const rides = p.fresh.map(t => ({ id: t.id, start: t.start, end: t.end, km: t.km, src: 'timeline', path: Core.simplify(t.path, 32), title: '', gType: t.type }));
+        try { await Store.saveRides(rides); closeSheet(); toast(`Imported ${nf0.format(rides.length)} rides`); location.hash = 'rides'; }
+        catch (e) { btn.disabled = false; btn.textContent = 'Import rides'; }
+      };
+    };
+  });
+}
+
+/* ---------- Live GPS ride ---------- */
+const T = { on: false };
+let wake = null;
+function liveHtml() {
+  const min = T.start ? (Date.now() - T.start) / 6e4 : 0, avg = min > 0 ? T.km / (min / 60) : 0;
+  const hh = Math.floor(min / 60), mm = String(Math.floor(min % 60)).padStart(2, '0'), ss = String(Math.floor((min * 60) % 60)).padStart(2, '0');
+  return `<div class="st"><i class="${T.fix ? 'on' : ''}"></i>${T.err ? 'NO GPS' : T.fix ? 'RECORDING' : 'WAITING FOR GPS'}</div>
+  <div class="center">
+    <div class="km num">${nf1.format(T.km)}<small>km</small></div>
+    ${T.err ? `<p class="msg err">${esc(T.err)}</p>` : `<p class="msg">${T.fix ? 'Keep this screen open while you ride. Your phone may stop GPS if the screen locks.' : 'Getting your location…'}</p>`}
+    <div class="grid3 num"><div><b>${hh}:${mm}:${ss}</b><span>TIME</span></div><div><b>${nf0.format(T.speed || 0)}</b><span>KM/H NOW</span></div><div><b>${nf0.format(avg)}</b><span>KM/H AVG</span></div></div>
+  </div>
+  <div class="btns">${T.err ? `<button class="btn" data-live="close">Close</button><button class="btn primary" data-live="manual">Log ride by hand</button>`
+    : `<button class="btn" data-live="discard">${T.armed ? 'Tap again to discard' : 'Discard'}</button><button class="btn primary" data-live="stop">Finish & save</button>`}</div>`;
+}
+function drawLive() { $('#live').innerHTML = liveHtml(); }
+function startRide(resume) {
+  Object.assign(T, { on: true, start: Date.now(), km: 0, pts: [], last: null, lastT: 0, speed: 0, maxKmh: 0, fix: false, err: '', armed: false });
+  if (resume) Object.assign(T, { start: resume.start, km: resume.km || 0, pts: resume.pts || [], maxKmh: resume.maxKmh || 0, last: null });
+  clearLive(); saveLive(true);
+  $('#live').hidden = false; document.body.style.overflow = 'hidden'; drawLive();
+  if (!('geolocation' in navigator)) { T.err = "This browser doesn't offer GPS."; return drawLive(); }
+  try { navigator.wakeLock && navigator.wakeLock.request('screen').then(l => { wake = l; }).catch(() => { }); } catch (e) { }
+  T.tick = setInterval(drawLive, 1000);
+  try {
+    T.watch = navigator.geolocation.watchPosition(onPos, e => {
+      if (e.code === 1) { T.err = IN_CLAUDE ? "Location access is blocked, so this ride can't be tracked here. Pages opened inside Claude can't use GPS. Log the ride by hand, or import it later from Google Timeline."
+        : "Location access is blocked. In Chrome, tap the icon left of the address, open Permissions, and allow Location for this site. Then start the ride again."; stopWatch(); }
+      else if (!T.fix) T.err = '';
+      drawLive();
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+  } catch (e) { T.err = "GPS isn't available here."; drawLive(); }
+}
+const LIVE_KEY = 'ride-live-v1';
+let liveSavedAt = 0;
+function saveLive(force) {
+  if (!force && Date.now() - liveSavedAt < 5000) return;
+  liveSavedAt = Date.now();
+  lsSet(LIVE_KEY, JSON.stringify({ start: T.start, km: T.km, pts: Core.simplify(T.pts, 400), maxKmh: T.maxKmh, at: Date.now() }));
+}
+function clearLive() { try { localStorage.removeItem(LIVE_KEY); } catch (e) { } }
+function pendingLive() { try { const o = JSON.parse(lsGet(LIVE_KEY) || 'null'); return o && o.start ? o : null; } catch (e) { return null; } }
+function onPos(p) {
+  const c = p.coords; T.err = '';
+  if (c.accuracy > 60) { drawLive(); return; }
+  const pt = [c.latitude, c.longitude];
+  if (T.last) {
+    const dk = Core.hav(T.last, pt); if (dk < 0.008) { T.speed = c.speed != null ? c.speed * 3.6 : 0; return; }
+    const h = (p.timestamp - T.lastT) / 36e5, v = h > 0 ? dk / h : 0;
+    if (v > 180) return;
+    T.km += dk; T.speed = c.speed != null ? c.speed * 3.6 : v; T.maxKmh = Math.max(T.maxKmh, T.speed);
+  }
+  T.fix = true; T.last = pt; T.lastT = p.timestamp; T.pts.push([+pt[0].toFixed(5), +pt[1].toFixed(5)]);
+  saveLive();
+}
+function stopWatch() { if (T.watch != null) navigator.geolocation.clearWatch(T.watch); T.watch = null; clearInterval(T.tick); if (wake) { wake.release().catch(() => { }); wake = null; } }
+function closeLive() { stopWatch(); clearLive(); T.on = false; $('#live').hidden = true; document.body.style.overflow = ''; }
+async function liveAction(a) {
+  if (a === 'close') return closeLive();
+  if (a === 'manual') { closeLive(); return sheetRide(); }
+  if (a === 'discard') { if (!T.armed) { T.armed = true; return drawLive(); } closeLive(); return toast('Ride discarded'); }
+  if (a === 'stop') {
+    if (T.km < 0.05) { closeLive(); return toast('Ride too short to save'); }
+    const r = { id: 'gps-' + T.start, start: T.start, end: T.lastT || Date.now(), km: Math.round(T.km * 100) / 100, src: 'gps', path: Core.simplify(T.pts, 60), maxKmh: Math.round(T.maxKmh), title: '' };
+    closeLive();
+    try { await Store.saveRides([r]); toast(`Saved ${nf1.format(r.km)} km ride`); } catch (e) { }
+  }
+}
+
+/* ---------- Export ---------- */
+function exportJson() {
+  const o = { app: 'ride-log', version: 1, exportedAt: new Date().toISOString(), garage: S.garage, rides: S.rides, fills: S.fills, exp: S.exp };
+  Store.download(`ride-log-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(o));
+}
+function exportCsv() {
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['Date', 'Type', 'Category', 'Amount (BDT)', 'Litres', 'Odometer (km)', 'Note']];
+  S.fills.forEach(x => rows.push([toInput(x.at).replace('T', ' '), 'Fuel', x.full ? 'Full tank' : 'Top-up', Math.round(x.total), x.liters, x.odo, x.station || '']));
+  S.exp.forEach(x => rows.push([toInput(x.at).slice(0, 10), 'Cost', x.cat, Math.round(x.amount), '', x.odo || '', x.note || '']));
+  rows.sort((a, b) => (a[0] > b[0] ? 1 : -1));
+  Store.download(`ride-log-costs-${new Date().toISOString().slice(0, 10)}.csv`, rows.map(r => r.map(q).join(',')).join('\n'));
+}
+
+/* ---------- Events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act],[data-edit-ride],[data-edit-fill],[data-edit-exp],[data-filter],[data-rep],[data-rep-step],[data-live]');
+  if (!t) return;
+  const d = data();
+  if (t.dataset.live) return liveAction(t.dataset.live);
+  if (t.dataset.editRide) { const r = d.rides.find(x => x.id === t.dataset.editRide); return r && sheetRide(r); }
+  if (t.dataset.editFill) { const r = d.fills.find(x => x.id === t.dataset.editFill); return r && sheetFuel(r); }
+  if (t.dataset.editExp) { const r = d.exp.find(x => x.id === t.dataset.editExp); return r && sheetExp(r); }
+  if (t.dataset.filter) { S.costFilter = t.dataset.filter; return render(); }
+  if (t.dataset.rep) { S.rep.kind = t.dataset.rep; return render(); }
+  if (t.dataset.repStep) {
+    const s = +t.dataset.repStep;
+    if (S.rep.kind === 'year') S.rep.y += s; else { const m = S.rep.m + s; S.rep.y += Math.floor(m / 12); S.rep.m = (m + 12) % 12; }
+    return render();
+  }
+  switch (t.dataset.act) {
+    case 'start-ride': return startRide();
+    case 'add-fuel': return sheetFuel();
+    case 'add-exp': return sheetExp();
+    case 'add-ride': return sheetRide();
+    case 'import': return sheetImport();
+    case 'settings': return sheetSettings();
+    case 'close-sheet': return closeSheet();
+    case 'more-rides': S.rideMonthsShown += 6; return render();
+    case 'hide-sample': S.hideSample = true; lsSet('ride-hide-sample', '1'); return render();
+    case 'show-sample': S.hideSample = false; lsSet('ride-hide-sample', '0'); closeSheet(); return render();
+    case 'export-json': return exportJson();
+    case 'install': if (S.installEvt) { S.installEvt.prompt(); S.installEvt = null; closeSheet(); } return;
+    case 'live-resume': { const p = pendingLive(); return p && startRide(p); }
+    case 'live-drop': clearLive(); toast('Ride discarded'); return render();
+    case 'live-save': {
+      const p = pendingLive(); if (!p) return render();
+      clearLive();
+      return Store.saveRides([{ id: 'gps-' + p.start, start: p.start, end: p.at || Date.now(), km: Math.round(p.km * 100) / 100, src: 'gps', path: Core.simplify(p.pts || [], 60), maxKmh: Math.round(p.maxKmh || 0), title: '' }])
+        .then(() => { toast(`Saved ${nf1.format(p.km)} km ride`); render(); }, () => { });
+    }
+    case 'export-csv': return exportCsv();
+  }
+});
+$('#scrim').addEventListener('click', e => { if (e.target.id === 'scrim') closeSheet(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#scrim').hidden) closeSheet(); });
+window.addEventListener('hashchange', route);
+let lastW = window.innerWidth, rzT;
+window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { if (Math.abs(window.innerWidth - lastW) > 20) { lastW = window.innerWidth; if (S.view === 'fuel' || S.view === 'reports') render(); } }, 200); });
+
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installEvt = e; });
+window.addEventListener('appinstalled', () => { S.installEvt = null; toast('Off Road is installed'); });
+if (!IN_CLAUDE) {
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { }
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
+}
+S.view = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
+render();
+Store.init();
+
+</script>
+</body>
+</html>
